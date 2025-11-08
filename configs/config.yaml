@@ -1,0 +1,13 @@
+http:
+  address: ":8080"
+  readTimeout: 5s
+  writeTimeout: 5s
+summary:
+  maxSummaryLen: 220
+  maxKeywords: 6
+  defaultPrompt: "You are an expert writing assistant that summarizes user provided text and extracts the most important keywords. Respond using the format: SUMMARY:\n<summary>\n\nKEYWORDS:\nkeyword1, keyword2, ..."
+llm:
+  apiKey: ""
+  baseUrl: "https://api.openai.com/v1"
+  model: "gpt-4o-mini"
+  temperature: 0.2

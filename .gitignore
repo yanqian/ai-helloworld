@@ -1,0 +1,15 @@
+# Build artifacts
+bin/
+.gocache/
+
+# IDE/editor
+.vscode/
+*.swp
+*.swo
+
+# Go tooling
+coverage.out
+*.test
+
+# OS junk
+.DS_Store
