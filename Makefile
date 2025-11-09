@@ -1,6 +1,12 @@
 APP_NAME=ai-helloworld
+GCP_PROJECT ?= ai-helloworld-armstrong
+REGION ?= asia-southeast1
+REPOSITORY ?= backend-repo
+SERVICE ?= summarizer
+TAG ?= $(shell git rev-parse --short HEAD)
+IMAGE ?= $(REGION)-docker.pkg.dev/$(GCP_PROJECT)/$(REPOSITORY)/$(SERVICE)
 
-.PHONY: all lint test build run docker
+.PHONY: all lint test build run docker-build docker-push deploy
 
 all: lint test build
 
@@ -17,5 +23,16 @@ run:
 	export LOG_LEVEL=debug
 	./bin/$(APP_NAME)
 
-docker:
-	docker build -t $(APP_NAME):latest .
+docker-build:
+	docker build -t $(IMAGE):$(TAG) .
+
+docker-push: docker-build
+	docker push $(IMAGE):$(TAG)
+
+deploy: docker-push
+	gcloud run deploy $(SERVICE) \
+		--image $(IMAGE):$(TAG) \
+		--project $(GCP_PROJECT) \
+		--region $(REGION) \
+		--platform managed \
+		--allow-unauthenticated
