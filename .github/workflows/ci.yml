@@ -84,9 +84,12 @@ jobs:
           echo "Checking gcloud config..."
           gcloud config list --format="text(core.project)"
 
-      - name: Build and push image via Cloud Build
-        run: gcloud builds submit --tag "$IMAGE" .
-
+      # - name: Build and push image via Cloud Build
+      #   run: gcloud builds submit --tag "$IMAGE" .
+      - name: Build Docker image
+        run: |
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
       - name: Deploy to Cloud Run
         run: gcloud run deploy "$CLOUD_RUN_SERVICE" \
           --image "$IMAGE" \
