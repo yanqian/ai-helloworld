@@ -79,6 +79,11 @@ jobs:
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
 
+      - name: Debug gcloud configuration
+        run: |
+          echo "Checking gcloud config..."
+          gcloud config list --format="text(core.project)"
+
       - name: Build and push image via Cloud Build
         run: gcloud builds submit --tag "$IMAGE" .
 
