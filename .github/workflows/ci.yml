@@ -86,14 +86,8 @@ jobs:
 
       - name: Build and push image via Cloud Build
         run: |
-          GCS_STAGING_DIR="gs://${GCP_PROJECT_ID}_cloudbuild/source"
           gcloud builds submit --tag "$IMAGE" . \
-            --gcs-source-staging-dir="${GCS_STAGING_DIR}" \
             --region="$GCP_REGION"
-      # - name: Build Docker image
-      #   run: |
-      #     docker build -t "$IMAGE" .
-      #     docker push "$IMAGE"
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy "$CLOUD_RUN_SERVICE" \
