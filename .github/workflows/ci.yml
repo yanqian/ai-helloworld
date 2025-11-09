@@ -101,5 +101,6 @@ jobs:
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
             --platform managed \
+            --set-env-vars "LLM_API_KEY=${{ secrets.LLM_API_KEY }}" \
             --allow-unauthenticated \
             --quiet
