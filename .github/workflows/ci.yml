@@ -60,11 +60,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     env:
-      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      GCP_REGION: ${{ secrets.GCP_REGION }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
       CLOUD_RUN_SERVICE: summarizer
-      GCP_REPOSITORY: ${{ secrets.GCP_REPOSITORY }}
-      IMAGE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/summarizer:${{ github.sha }}
+      GCP_REPOSITORY: ${{ vars.GCP_REPOSITORY }}
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_REPOSITORY }}/summarizer:${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
