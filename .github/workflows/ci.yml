@@ -88,7 +88,7 @@ jobs:
         run: |
           GCS_STAGING_DIR="gs://${GCP_PROJECT_ID}_cloudbuild/source"
           gcloud builds submit --tag "$IMAGE" . \
-            --gcs-source-staging-dir="${GCS_STAGING_DIR}"
+            --gcs-source-staging-dir="${GCS_STAGING_DIR}" \
             --region="$GCP_REGION"
       # - name: Build Docker image
       #   run: |
