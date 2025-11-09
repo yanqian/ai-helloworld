@@ -68,7 +68,7 @@ SA_KEY_FILE=${SA_KEY_FILE:-$DEFAULT_KEY_PATH}
 CLOUD_BUILD_BUCKET=${CLOUD_BUILD_BUCKET:-"gs://${PROJECT_ID}_cloudbuild"}
 SKIP_SA_KEY=${SKIP_SA_KEY:-false}
 
-IFS=' ' read -r -a SA_ROLES <<<"${SA_ROLES:-roles/run.admin roles/iam.serviceAccountUser roles/artifactregistry.writer roles/cloudbuild.builds.editor roles/storage.admin}"
+IFS=' ' read -r -a SA_ROLES <<<"${SA_ROLES:-roles/run.admin roles/iam.serviceAccountUser roles/artifactregistry.writer roles/cloudbuild.builds.editor roles/storage.admin roles/logging.viewer roles/viewer}"
 
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
