@@ -15,7 +15,11 @@ func NewRouter(cfg *config.Config, handler *SummaryHandler) *http.Server {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
-	router.Use(gin.Recovery(), requestLogger(handler.logger))
+	router.Use(
+		gin.Recovery(),
+		requestLogger(handler.logger),
+		corsMiddleware(),
+	)
 
 	api := router.Group("/api/v1")
 	{

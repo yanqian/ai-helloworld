@@ -113,6 +113,20 @@ func TestRouter_SummarizeStreamInvalidInput(t *testing.T) {
 	require.Contains(t, errBody["error"]["message"], "text cannot be empty")
 }
 
+func TestRouter_CORSPreflight(t *testing.T) {
+	server := newRouterUnderTest(t, &stubSummarizer{})
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/summaries", nil)
+	recorder := httptest.NewRecorder()
+
+	server.Handler.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusNoContent, recorder.Code)
+	require.Equal(t, "*", recorder.Header().Get("Access-Control-Allow-Origin"))
+	require.Equal(t, "POST, OPTIONS", recorder.Header().Get("Access-Control-Allow-Methods"))
+	require.Equal(t, "Content-Type", recorder.Header().Get("Access-Control-Allow-Headers"))
+}
+
 func performRequest(path, body string, server *http.Server) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
