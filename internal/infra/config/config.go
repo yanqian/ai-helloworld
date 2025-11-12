@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -19,9 +20,26 @@ type Config struct {
 
 // HTTPConfig controls server level behavior.
 type HTTPConfig struct {
-	Address      string        `yaml:"address"`
-	ReadTimeout  time.Duration `yaml:"readTimeout"`
-	WriteTimeout time.Duration `yaml:"writeTimeout"`
+	Address      string          `yaml:"address"`
+	ReadTimeout  time.Duration   `yaml:"readTimeout"`
+	WriteTimeout time.Duration   `yaml:"writeTimeout"`
+	RateLimit    RateLimitConfig `yaml:"rateLimit"`
+	Retry        RetryConfig     `yaml:"retry"`
+}
+
+// RateLimitConfig drives the request limiting middleware.
+type RateLimitConfig struct {
+	Enabled           bool `yaml:"enabled"`
+	RequestsPerMinute int  `yaml:"requestsPerMinute"`
+	Burst             int  `yaml:"burst"`
+}
+
+// RetryConfig configures best-effort retries for idempotent requests.
+type RetryConfig struct {
+	Enabled     bool          `yaml:"enabled"`
+	MaxAttempts int           `yaml:"maxAttempts"`
+	BaseBackoff time.Duration `yaml:"baseBackoff"`
+	Exclude     []string      `yaml:"exclude"`
 }
 
 // SummaryConfig defines the heuristics for the summarizer domain.
@@ -104,6 +122,32 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.LLM.Temperature = float32(parsed)
 		}
 	}
+	if v := os.Getenv("HTTP_RATE_LIMIT_ENABLED"); v != "" {
+		cfg.HTTP.RateLimit.Enabled = v == "1" || strings.EqualFold(v, "true")
+	}
+	if v := os.Getenv("HTTP_RATE_LIMIT_RPM"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.HTTP.RateLimit.RequestsPerMinute = parsed
+		}
+	}
+	if v := os.Getenv("HTTP_RATE_LIMIT_BURST"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.HTTP.RateLimit.Burst = parsed
+		}
+	}
+	if v := os.Getenv("HTTP_RETRY_ENABLED"); v != "" {
+		cfg.HTTP.Retry.Enabled = v == "1" || strings.EqualFold(v, "true")
+	}
+	if v := os.Getenv("HTTP_RETRY_MAX_ATTEMPTS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.HTTP.Retry.MaxAttempts = parsed
+		}
+	}
+	if v := os.Getenv("HTTP_RETRY_BASE_BACKOFF"); v != "" {
+		if parsed, err := time.ParseDuration(v); err == nil {
+			cfg.HTTP.Retry.BaseBackoff = parsed
+		}
+	}
 }
 
 func defaultConfig() *Config {
@@ -112,6 +156,19 @@ func defaultConfig() *Config {
 			Address:      ":8080",
 			ReadTimeout:  5 * time.Second,
 			WriteTimeout: 5 * time.Second,
+			RateLimit: RateLimitConfig{
+				Enabled:           true,
+				RequestsPerMinute: 60,
+				Burst:             20,
+			},
+			Retry: RetryConfig{
+				Enabled:     true,
+				MaxAttempts: 3,
+				BaseBackoff: 150 * time.Millisecond,
+				Exclude: []string{
+					"/api/v1/summaries/stream",
+				},
+			},
 		},
 		Summary: SummaryConfig{
 			MaxSummaryLen: 200,
@@ -138,6 +195,22 @@ func (c *Config) Validate() error {
 	}
 	if c.Summary.DefaultPrompt == "" {
 		return errors.New("summary.defaultPrompt cannot be empty")
+	}
+	if c.HTTP.RateLimit.Enabled {
+		if c.HTTP.RateLimit.RequestsPerMinute <= 0 {
+			return errors.New("http.rateLimit.requestsPerMinute must be positive")
+		}
+		if c.HTTP.RateLimit.Burst <= 0 {
+			return errors.New("http.rateLimit.burst must be positive")
+		}
+	}
+	if c.HTTP.Retry.Enabled {
+		if c.HTTP.Retry.MaxAttempts <= 0 {
+			return errors.New("http.retry.maxAttempts must be positive")
+		}
+		if c.HTTP.Retry.BaseBackoff <= 0 {
+			return errors.New("http.retry.baseBackoff must be positive")
+		}
 	}
 	return nil
 }

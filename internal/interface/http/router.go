@@ -17,8 +17,10 @@ func NewRouter(cfg *config.Config, handler *SummaryHandler) *http.Server {
 	router := gin.New()
 	router.Use(
 		gin.Recovery(),
+		errorHandlingMiddleware(handler.logger),
 		requestLogger(handler.logger),
 		corsMiddleware(),
+		rateLimitMiddleware(cfg.HTTP.RateLimit, handler.logger),
 	)
 
 	api := router.Group("/api/v1")
@@ -29,7 +31,7 @@ func NewRouter(cfg *config.Config, handler *SummaryHandler) *http.Server {
 
 	return &http.Server{
 		Addr:           cfg.HTTP.Address,
-		Handler:        router,
+		Handler:        withRetry(router, cfg.HTTP.Retry, handler.logger),
 		ReadTimeout:    cfg.HTTP.ReadTimeout,
 		WriteTimeout:   cfg.HTTP.WriteTimeout,
 		MaxHeaderBytes: 1 << 20,

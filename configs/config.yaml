@@ -2,6 +2,16 @@ http:
   address: ":8080"
   readTimeout: 5s
   writeTimeout: 5s
+  rateLimit:
+    enabled: true
+    requestsPerMinute: 60
+    burst: 20
+  retry:
+    enabled: true
+    maxAttempts: 3
+    baseBackoff: 150ms
+    exclude:
+      - "/api/v1/summaries/stream"
 summary:
   maxSummaryLen: 220
   maxKeywords: 6

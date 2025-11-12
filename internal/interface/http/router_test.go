@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
 	"github.com/yanqian/ai-helloworld/internal/domain/summarizer"
@@ -127,15 +129,88 @@ func TestRouter_CORSPreflight(t *testing.T) {
 	require.Equal(t, "Content-Type", recorder.Header().Get("Access-Control-Allow-Headers"))
 }
 
+func TestRouter_RetryOnTransientFailure(t *testing.T) {
+	var calls int
+	svc := &stubSummarizer{
+		summarizeFn: func(ctx context.Context, req summarizer.Request) (summarizer.Response, error) {
+			calls++
+			if calls == 1 {
+				return summarizer.Response{}, errors.New("temporary failure")
+			}
+			return summarizer.Response{Summary: "recovered"}, nil
+		},
+	}
+
+	server := newRouterUnderTest(t, svc, func(cfg *config.Config) {
+		cfg.HTTP.Retry.Enabled = true
+		cfg.HTTP.Retry.MaxAttempts = 2
+		cfg.HTTP.Retry.BaseBackoff = 0
+	})
+
+	recorder := performRequest("/api/v1/summaries", `{"text":"hello"}`, server)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, 2, calls)
+}
+
+func TestRouter_RateLimitExceeded(t *testing.T) {
+	server := newRouterUnderTest(t, &stubSummarizer{}, func(cfg *config.Config) {
+		cfg.HTTP.RateLimit.Enabled = true
+		cfg.HTTP.RateLimit.RequestsPerMinute = 1
+		cfg.HTTP.RateLimit.Burst = 1
+	})
+
+	first := performRequest("/api/v1/summaries", `{"text":"hello"}`, server)
+	require.Equal(t, http.StatusOK, first.Code)
+
+	second := performRequest("/api/v1/summaries", `{"text":"hello"}`, server)
+	require.Equal(t, http.StatusTooManyRequests, second.Code)
+
+	errBody := decodeErrorBody(t, second.Body.Bytes())
+	require.Equal(t, "rate_limit_exceeded", errBody["error"]["code"])
+}
+
+func TestIPRateLimiterBasic(t *testing.T) {
+	limiter := newIPRateLimiter(config.RateLimitConfig{RequestsPerMinute: 1, Burst: 1})
+	require.True(t, limiter.allow("ip"))
+	require.False(t, limiter.allow("ip"))
+}
+
+func TestRateLimitMiddlewareBlocks(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(errorHandlingMiddleware(newTestLogger()), rateLimitMiddleware(config.RateLimitConfig{
+		Enabled:           true,
+		RequestsPerMinute: 1,
+		Burst:             1,
+	}, newTestLogger()))
+	router.POST("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	rec1 := httptest.NewRecorder()
+	req1 := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"text":"a"}`))
+	req1.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec1, req1)
+	require.Equal(t, http.StatusOK, rec1.Code)
+
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"text":"a"}`))
+	req2.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec2, req2)
+	require.Equal(t, http.StatusTooManyRequests, rec2.Code)
+}
+
 func performRequest(path, body string, server *http.Server) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Forwarded-For", "203.0.113.10")
+	req.RemoteAddr = "203.0.113.1:1234"
 	rec := httptest.NewRecorder()
 	server.Handler.ServeHTTP(rec, req)
 	return rec
 }
 
-func newRouterUnderTest(t *testing.T, svc summarizer.Service) *http.Server {
+func newRouterUnderTest(t *testing.T, svc summarizer.Service, overrides ...func(*config.Config)) *http.Server {
 	t.Helper()
 	handler := NewSummaryHandler(svc, newTestLogger())
 	cfg := &config.Config{
@@ -143,7 +218,16 @@ func newRouterUnderTest(t *testing.T, svc summarizer.Service) *http.Server {
 			Address:      ":0",
 			ReadTimeout:  time.Second,
 			WriteTimeout: time.Second,
+			RateLimit: config.RateLimitConfig{
+				Enabled: false,
+			},
+			Retry: config.RetryConfig{
+				Enabled: false,
+			},
 		},
+	}
+	for _, override := range overrides {
+		override(cfg)
 	}
 	return NewRouter(cfg, handler)
 }

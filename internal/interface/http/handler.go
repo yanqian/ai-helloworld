@@ -26,7 +26,7 @@ func NewSummaryHandler(svc summarizer.Service, logger *slog.Logger) *SummaryHand
 func (h *SummaryHandler) Summarize(c *gin.Context) {
 	var req summarizer.Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.writeError(c, http.StatusBadRequest, "invalid_request", err)
+		abortWithError(c, NewHTTPError(http.StatusBadRequest, "invalid_request", errMessage(err), err))
 		return
 	}
 
@@ -36,7 +36,7 @@ func (h *SummaryHandler) Summarize(c *gin.Context) {
 		if apperrors.IsCode(err, "invalid_input") {
 			status = http.StatusBadRequest
 		}
-		h.writeError(c, status, "summarize_failed", err)
+		abortWithError(c, NewHTTPError(status, "summarize_failed", errMessage(err), err))
 		return
 	}
 
@@ -47,7 +47,7 @@ func (h *SummaryHandler) Summarize(c *gin.Context) {
 func (h *SummaryHandler) SummarizeStream(c *gin.Context) {
 	var req summarizer.Request
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.writeError(c, http.StatusBadRequest, "invalid_request", err)
+		abortWithError(c, NewHTTPError(http.StatusBadRequest, "invalid_request", errMessage(err), err))
 		return
 	}
 
@@ -57,7 +57,7 @@ func (h *SummaryHandler) SummarizeStream(c *gin.Context) {
 		if apperrors.IsCode(err, "invalid_input") {
 			status = http.StatusBadRequest
 		}
-		h.writeError(c, status, "summarize_failed", err)
+		abortWithError(c, NewHTTPError(status, "summarize_failed", errMessage(err), err))
 		return
 	}
 
@@ -67,7 +67,7 @@ func (h *SummaryHandler) SummarizeStream(c *gin.Context) {
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
-		h.writeError(c, http.StatusInternalServerError, "stream_unsupported", nil)
+		abortWithError(c, NewHTTPError(http.StatusInternalServerError, "stream_unsupported", "streaming not supported", nil))
 		return
 	}
 
@@ -82,18 +82,6 @@ func (h *SummaryHandler) SummarizeStream(c *gin.Context) {
 		c.Writer.Write([]byte("\n\n"))
 		flusher.Flush()
 	}
-}
-
-func (h *SummaryHandler) writeError(c *gin.Context, status int, code string, err error) {
-	if err != nil {
-		h.logger.Error("request failed", "code", code, "error", err)
-	}
-	c.JSON(status, gin.H{
-		"error": gin.H{
-			"code":    code,
-			"message": errMessage(err),
-		},
-	})
 }
 
 func errMessage(err error) string {
