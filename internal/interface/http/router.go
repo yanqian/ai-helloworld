@@ -11,7 +11,7 @@ import (
 )
 
 // NewRouter wires up the HTTP handlers and returns a configured server.
-func NewRouter(cfg *config.Config, handler *SummaryHandler) *http.Server {
+func NewRouter(cfg *config.Config, handler *Handler) *http.Server {
 	gin.SetMode(gin.ReleaseMode)
 
 	router := gin.New()
@@ -27,6 +27,7 @@ func NewRouter(cfg *config.Config, handler *SummaryHandler) *http.Server {
 	{
 		api.POST("/summaries", handler.Summarize)
 		api.POST("/summaries/stream", handler.SummarizeStream)
+		api.POST("/uv-advice", handler.RecommendProtection)
 	}
 
 	return &http.Server{

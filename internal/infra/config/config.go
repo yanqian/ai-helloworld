@@ -13,9 +13,10 @@ import (
 
 // Config aggregates runtime configuration used across the service.
 type Config struct {
-	HTTP    HTTPConfig    `yaml:"http"`
-	Summary SummaryConfig `yaml:"summary"`
-	LLM     LLMConfig     `yaml:"llm"`
+	HTTP      HTTPConfig      `yaml:"http"`
+	Summary   SummaryConfig   `yaml:"summary"`
+	LLM       LLMConfig       `yaml:"llm"`
+	UVAdvisor UVAdvisorConfig `yaml:"uvAdvisor"`
 }
 
 // HTTPConfig controls server level behavior.
@@ -55,6 +56,12 @@ type LLMConfig struct {
 	BaseURL     string  `yaml:"baseUrl"`
 	Model       string  `yaml:"model"`
 	Temperature float32 `yaml:"temperature"`
+}
+
+// UVAdvisorConfig controls the UV clothing recommendation domain.
+type UVAdvisorConfig struct {
+	APIBaseURL string `yaml:"apiBaseUrl"`
+	Prompt     string `yaml:"prompt"`
 }
 
 // Load reads configuration from a YAML file and environment variables.
@@ -122,6 +129,12 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.LLM.Temperature = float32(parsed)
 		}
 	}
+	if v := os.Getenv("UV_API_BASE_URL"); v != "" {
+		cfg.UVAdvisor.APIBaseURL = v
+	}
+	if v := os.Getenv("UV_PROMPT"); v != "" {
+		cfg.UVAdvisor.Prompt = v
+	}
 	if v := os.Getenv("HTTP_RATE_LIMIT_ENABLED"); v != "" {
 		cfg.HTTP.RateLimit.Enabled = v == "1" || strings.EqualFold(v, "true")
 	}
@@ -179,6 +192,10 @@ func defaultConfig() *Config {
 			Model:       "gpt-4o-mini",
 			Temperature: 0.2,
 		},
+		UVAdvisor: UVAdvisorConfig{
+			APIBaseURL: "https://api-open.data.gov.sg/v2/real-time/api/uv",
+			Prompt:     "You are a UV protection stylist for Singapore. Analyze the provided UV index readings and recommend weather appropriate clothing and protection. Respond strictly as JSON with the keys summary (string), clothing (array of <=4 short tips), protection (array of <=4 short tips), and tips (array of optional reminders). Be concise yet actionable.",
+		},
 	}
 }
 
@@ -195,6 +212,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Summary.DefaultPrompt == "" {
 		return errors.New("summary.defaultPrompt cannot be empty")
+	}
+	if c.UVAdvisor.APIBaseURL == "" {
+		return errors.New("uvAdvisor.apiBaseUrl cannot be empty")
+	}
+	if c.UVAdvisor.Prompt == "" {
+		return errors.New("uvAdvisor.prompt cannot be empty")
 	}
 	if c.HTTP.RateLimit.Enabled {
 		if c.HTTP.RateLimit.RequestsPerMinute <= 0 {

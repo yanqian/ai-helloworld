@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/yanqian/ai-helloworld/internal/domain/summarizer"
+	"github.com/yanqian/ai-helloworld/internal/domain/uvadvisor"
 	"github.com/yanqian/ai-helloworld/internal/infra/config"
 	apperrors "github.com/yanqian/ai-helloworld/pkg/errors"
 )
@@ -30,7 +31,7 @@ func TestRouter_SummarizeSuccess(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/summaries", `{"text":"hello world"}`, newRouterUnderTest(t, svc))
+	recorder := performRequest("/api/v1/summaries", `{"text":"hello world"}`, newRouterUnderTest(t, svc, nil))
 	require.Equal(t, http.StatusOK, recorder.Code)
 
 	var got summarizer.Response
@@ -41,7 +42,7 @@ func TestRouter_SummarizeSuccess(t *testing.T) {
 func TestRouter_SummarizeInvalidJSON(t *testing.T) {
 	svc := &stubSummarizer{}
 
-	recorder := performRequest("/api/v1/summaries", `{"text":123}`, newRouterUnderTest(t, svc))
+	recorder := performRequest("/api/v1/summaries", `{"text":123}`, newRouterUnderTest(t, svc, nil))
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 
 	errBody := decodeErrorBody(t, recorder.Body.Bytes())
@@ -56,7 +57,7 @@ func TestRouter_SummarizeInvalidInput(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/summaries", `{"text":""}`, newRouterUnderTest(t, svc))
+	recorder := performRequest("/api/v1/summaries", `{"text":""}`, newRouterUnderTest(t, svc, nil))
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 
 	errBody := decodeErrorBody(t, recorder.Body.Bytes())
@@ -83,7 +84,7 @@ func TestRouter_SummarizeStreamSuccess(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/summaries/stream", `{"text":"stream me"}`, newRouterUnderTest(t, svc))
+	recorder := performRequest("/api/v1/summaries/stream", `{"text":"stream me"}`, newRouterUnderTest(t, svc, nil))
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
 
@@ -107,7 +108,7 @@ func TestRouter_SummarizeStreamInvalidInput(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/summaries/stream", `{"text":""}`, newRouterUnderTest(t, svc))
+	recorder := performRequest("/api/v1/summaries/stream", `{"text":""}`, newRouterUnderTest(t, svc, nil))
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 
 	errBody := decodeErrorBody(t, recorder.Body.Bytes())
@@ -116,7 +117,7 @@ func TestRouter_SummarizeStreamInvalidInput(t *testing.T) {
 }
 
 func TestRouter_CORSPreflight(t *testing.T) {
-	server := newRouterUnderTest(t, &stubSummarizer{})
+	server := newRouterUnderTest(t, &stubSummarizer{}, nil)
 
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/summaries", nil)
 	recorder := httptest.NewRecorder()
@@ -141,7 +142,7 @@ func TestRouter_RetryOnTransientFailure(t *testing.T) {
 		},
 	}
 
-	server := newRouterUnderTest(t, svc, func(cfg *config.Config) {
+	server := newRouterUnderTest(t, svc, nil, func(cfg *config.Config) {
 		cfg.HTTP.Retry.Enabled = true
 		cfg.HTTP.Retry.MaxAttempts = 2
 		cfg.HTTP.Retry.BaseBackoff = 0
@@ -153,7 +154,7 @@ func TestRouter_RetryOnTransientFailure(t *testing.T) {
 }
 
 func TestRouter_RateLimitExceeded(t *testing.T) {
-	server := newRouterUnderTest(t, &stubSummarizer{}, func(cfg *config.Config) {
+	server := newRouterUnderTest(t, &stubSummarizer{}, nil, func(cfg *config.Config) {
 		cfg.HTTP.RateLimit.Enabled = true
 		cfg.HTTP.RateLimit.RequestsPerMinute = 1
 		cfg.HTTP.RateLimit.Burst = 1
@@ -210,9 +211,48 @@ func performRequest(path, body string, server *http.Server) *httptest.ResponseRe
 	return rec
 }
 
-func newRouterUnderTest(t *testing.T, svc summarizer.Service, overrides ...func(*config.Config)) *http.Server {
+func TestRouter_UVAdviceSuccess(t *testing.T) {
+	advice := uvadvisor.Response{Date: "2024-07-01", Category: "high", Summary: "Hot", Clothing: []string{"Hat"}}
+	svc := &stubUVAdvisor{
+		recommendFn: func(ctx context.Context, req uvadvisor.Request) (uvadvisor.Response, error) {
+			require.Equal(t, "2024-07-01", req.Date)
+			return advice, nil
+		},
+	}
+
+	recorder := performRequest("/api/v1/uv-advice", `{"date":"2024-07-01"}`, newRouterUnderTest(t, &stubSummarizer{}, svc))
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp uvadvisor.Response
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, advice.Date, resp.Date)
+	require.Equal(t, advice.Summary, resp.Summary)
+}
+
+func TestRouter_UVAdviceInvalidJSON(t *testing.T) {
+	recorder := performRequest("/api/v1/uv-advice", `{"date":123}`, newRouterUnderTest(t, &stubSummarizer{}, &stubUVAdvisor{}))
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestRouter_UVAdviceUpstreamError(t *testing.T) {
+	svc := &stubUVAdvisor{
+		recommendFn: func(ctx context.Context, req uvadvisor.Request) (uvadvisor.Response, error) {
+			return uvadvisor.Response{}, apperrors.Wrap("uv_data_error", "upstream unavailable", nil)
+		},
+	}
+	recorder := performRequest("/api/v1/uv-advice", `{}`, newRouterUnderTest(t, &stubSummarizer{}, svc))
+	require.Equal(t, http.StatusBadGateway, recorder.Code)
+
+	errBody := decodeErrorBody(t, recorder.Body.Bytes())
+	require.Equal(t, "uv_advice_failed", errBody["error"]["code"])
+}
+
+func newRouterUnderTest(t *testing.T, summarySvc summarizer.Service, advisorSvc uvadvisor.Service, overrides ...func(*config.Config)) *http.Server {
 	t.Helper()
-	handler := NewSummaryHandler(svc, newTestLogger())
+	if advisorSvc == nil {
+		advisorSvc = &stubUVAdvisor{}
+	}
+	handler := NewHandler(summarySvc, advisorSvc, newTestLogger())
 	cfg := &config.Config{
 		HTTP: config.HTTPConfig{
 			Address:      ":0",
@@ -256,6 +296,17 @@ func (s *stubSummarizer) StreamSummary(ctx context.Context, req summarizer.Reque
 	stream := make(chan summarizer.StreamChunk)
 	close(stream)
 	return stream, nil
+}
+
+type stubUVAdvisor struct {
+	recommendFn func(ctx context.Context, req uvadvisor.Request) (uvadvisor.Response, error)
+}
+
+func (s *stubUVAdvisor) Recommend(ctx context.Context, req uvadvisor.Request) (uvadvisor.Response, error) {
+	if s.recommendFn != nil {
+		return s.recommendFn(ctx, req)
+	}
+	return uvadvisor.Response{}, nil
 }
 
 func decodeErrorBody(t *testing.T, raw []byte) map[string]map[string]string {

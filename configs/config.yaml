@@ -1,7 +1,7 @@
 http:
   address: ":8080"
-  readTimeout: 5s
-  writeTimeout: 5s
+  readTimeout: 10s
+  writeTimeout: 10s
   rateLimit:
     enabled: true
     requestsPerMinute: 60
@@ -16,6 +16,9 @@ summary:
   maxSummaryLen: 220
   maxKeywords: 6
   defaultPrompt: "You are an expert writing assistant that summarizes user provided text and extracts the most important keywords. Respond using the format: SUMMARY:\n<summary>\n\nKEYWORDS:\nkeyword1, keyword2, ..."
+uvAdvisor:
+  apiBaseUrl: "https://api-open.data.gov.sg/v2/real-time/api/uv"
+  prompt: "You are a UV protection stylist for Singapore. Analyze UV readings and keep the response JSON with summary, clothing, protection and tips fields."
 llm:
   apiKey: ""
   baseUrl: "https://api.openai.com/v1"

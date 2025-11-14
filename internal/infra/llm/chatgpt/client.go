@@ -17,8 +17,10 @@ const defaultBaseURL = "https://api.openai.com/v1"
 
 // Message mirrors the OpenAI chat message structure.
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
 
 // ChatCompletionRequest is the payload sent to the ChatGPT API.
@@ -27,6 +29,7 @@ type ChatCompletionRequest struct {
 	Messages    []Message `json:"messages"`
 	Temperature float32   `json:"temperature,omitempty"`
 	Stream      bool      `json:"stream,omitempty"`
+	Tools       []Tool    `json:"tools,omitempty"`
 }
 
 // ChatCompletionResponse captures the response for non streaming calls.
@@ -34,6 +37,32 @@ type ChatCompletionResponse struct {
 	Choices []struct {
 		Message Message `json:"message"`
 	} `json:"choices"`
+}
+
+// Tool represents a callable function exposed to ChatGPT.
+type Tool struct {
+	Type     string       `json:"type"`
+	Function ToolFunction `json:"function"`
+}
+
+// ToolFunction defines the shape of a callable tool.
+type ToolFunction struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Parameters  map[string]any `json:"parameters,omitempty"`
+}
+
+// ToolCall is returned when ChatGPT wants to call a function.
+type ToolCall struct {
+	ID       string             `json:"id"`
+	Type     string             `json:"type"`
+	Function ToolCallDefinition `json:"function"`
+}
+
+// ToolCallDefinition contains the function payload.
+type ToolCallDefinition struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 // ChatCompletionStreamChunk captures a streaming frame from ChatGPT.

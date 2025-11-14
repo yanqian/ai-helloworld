@@ -8,6 +8,7 @@ package main
 import (
 	"github.com/yanqian/ai-helloworld/internal/bootstrap"
 	"github.com/yanqian/ai-helloworld/internal/domain/summarizer"
+	"github.com/yanqian/ai-helloworld/internal/domain/uvadvisor"
 	"github.com/yanqian/ai-helloworld/internal/infra/config"
 	httpiface "github.com/yanqian/ai-helloworld/internal/interface/http"
 	"github.com/yanqian/ai-helloworld/pkg/logger"
@@ -19,14 +20,17 @@ func initializeApp() (*bootstrap.App, error) {
 		return nil, err
 	}
 	summarizerConfig := provideSummaryConfig(configConfig)
+	uvadvisorConfig := provideUVAdvisorConfig(configConfig)
 	slogLogger := logger.New()
 	chatgptClient, err := provideChatGPTClient(configConfig)
 	if err != nil {
 		return nil, err
 	}
+	client := provideUVClient(configConfig)
 	service := summarizer.NewService(summarizerConfig, chatgptClient, slogLogger)
-	summaryHandler := httpiface.NewSummaryHandler(service, slogLogger)
-	httpServer := httpiface.NewRouter(configConfig, summaryHandler)
+	service2 := uvadvisor.NewService(uvadvisorConfig, client, chatgptClient, slogLogger)
+	handler := httpiface.NewHandler(service, service2, slogLogger)
+	httpServer := httpiface.NewRouter(configConfig, handler)
 	app := bootstrap.NewApp(configConfig, slogLogger, httpServer)
 	return app, nil
 }
