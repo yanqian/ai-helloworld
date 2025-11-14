@@ -54,74 +54,32 @@ func (s *service) Recommend(ctx context.Context, req Request) (Response, error) 
 		return Response{}, apperrors.Wrap("invalid_input", "date must be formatted as YYYY-MM-DD", err)
 	}
 
-	messages := []chatgpt.Message{
-		{Role: "system", Content: s.buildSystemPrompt()},
-		{Role: "user", Content: fmt.Sprintf("Create outfit and protection advice for outdoor plans roughly on %s Singapore time. Always call the get_sg_uv tool first before replying.", date)},
-	}
-
-	toolDef := s.toolDefinition()
-
-	first, err := s.client.CreateChatCompletion(ctx, chatgpt.ChatCompletionRequest{
-		Model:       s.cfg.Model,
-		Messages:    messages,
-		Temperature: s.cfg.Temperature,
-		Tools:       []chatgpt.Tool{toolDef},
-	})
-	if err != nil {
-		return Response{}, apperrors.Wrap("llm_error", "chatgpt request failed", err)
-	}
-	if len(first.Choices) == 0 {
-		return Response{}, apperrors.Wrap("llm_error", "chatgpt returned no choices", nil)
-	}
-
-	initialMsg := first.Choices[0].Message
-	if len(initialMsg.ToolCalls) == 0 {
-		return Response{}, apperrors.Wrap("llm_error", "chatgpt did not call the UV tool", nil)
-	}
-
-	call := initialMsg.ToolCalls[0]
-	toolArgs, err := s.parseToolArgs(call.Function.Arguments)
-	if err != nil {
-		return Response{}, apperrors.Wrap("llm_error", "invalid tool arguments", err)
-	}
-	s.logger.Info("uv advisor tool call issued", "function", call.Function.Name, "arguments", call.Function.Arguments)
-
-	fetchDate := date
-	if toolArgs.Time != "" {
-		if parsed, parseErr := s.parseSingaporeDate(toolArgs.Time); parseErr == nil {
-			fetchDate = parsed
-		}
-	}
-
-	series, err := s.uvClient.Fetch(ctx, fetchDate)
+	series, err := s.uvClient.Fetch(ctx, date)
 	if err != nil {
 		return Response{}, apperrors.Wrap("uv_data_error", "failed to fetch UV data", err)
 	}
 	if len(series.Readings) == 0 {
 		return Response{}, apperrors.Wrap("uv_data_error", "no UV readings available for the selected date", nil)
 	}
-	s.logger.Info("uv advisor uv data fetched", "date", fetchDate, "readings", len(series.Readings))
+	s.logger.Info("uv advisor uv data fetched", "date", date, "readings", len(series.Readings))
 
-	messages = append(messages, initialMsg)
-	messages = append(messages, chatgpt.Message{
-		Role:       "tool",
-		Content:    string(series.RawJSON),
-		ToolCallID: call.ID,
-	})
+	messages := []chatgpt.Message{
+		{Role: "system", Content: s.buildSystemPrompt()},
+		{Role: "user", Content: s.buildAdvicePrompt(date, series)},
+	}
 
-	second, err := s.client.CreateChatCompletion(ctx, chatgpt.ChatCompletionRequest{
+	completion, err := s.client.CreateChatCompletion(ctx, chatgpt.ChatCompletionRequest{
 		Model:       s.cfg.Model,
 		Messages:    messages,
 		Temperature: s.cfg.Temperature,
-		Tools:       []chatgpt.Tool{toolDef},
 	})
 	if err != nil {
-		return Response{}, apperrors.Wrap("llm_error", "chatgpt follow-up request failed", err)
+		return Response{}, apperrors.Wrap("llm_error", "chatgpt request failed", err)
 	}
-	if len(second.Choices) == 0 {
-		return Response{}, apperrors.Wrap("llm_error", "chatgpt follow-up returned no choices", nil)
+	if len(completion.Choices) == 0 {
+		return Response{}, apperrors.Wrap("llm_error", "chatgpt returned no choices", nil)
 	}
-	finalMsg := second.Choices[0].Message
+	finalMsg := completion.Choices[0].Message
 	if len(finalMsg.ToolCalls) > 0 {
 		return Response{}, apperrors.Wrap("llm_error", "chatgpt requested unexpected additional tool calls", nil)
 	}
@@ -139,7 +97,7 @@ func (s *service) Recommend(ctx context.Context, req Request) (Response, error) 
 		dataTimestamp = series.UpdatedAt.Format(time.RFC3339)
 	}
 	res := Response{
-		Date:          firstNonEmpty(series.Date, fetchDate),
+		Date:          firstNonEmpty(series.Date, date),
 		Category:      stats.Category,
 		MaxUV:         stats.Max,
 		PeakHour:      stats.PeakHour.Format(time.RFC3339),
@@ -151,8 +109,6 @@ func (s *service) Recommend(ctx context.Context, req Request) (Response, error) 
 		Readings:      readings,
 		DataTimestamp: dataTimestamp,
 	}
-	s.logger.Info("uv advisor final returns", "content", res)
-
 	return res, nil
 }
 
@@ -279,6 +235,28 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+func (s *service) buildAdvicePrompt(date string, series UVSeries) string {
+	payload := strings.TrimSpace(string(series.RawJSON))
+	if payload == "" {
+		wire := struct {
+			Date     string    `json:"date"`
+			Source   string    `json:"source"`
+			Readings []Reading `json:"readings"`
+		}{
+			Date:     firstNonEmpty(series.Date, date),
+			Source:   firstNonEmpty(series.Source, s.cfg.SourceURL),
+			Readings: toResponseReadings(series.Readings),
+		}
+		if data, err := json.Marshal(wire); err == nil {
+			payload = string(data)
+		} else {
+			payload = "{}"
+		}
+	}
+
+	return fmt.Sprintf("Create outfit and protection advice for outdoor plans roughly on %s Singapore time based ONLY on this Singapore UV data: %s", date, payload)
+}
+
 func (s *service) buildSystemPrompt() string {
 	base := strings.TrimSpace(s.cfg.Prompt)
 	if base == "" {
@@ -286,51 +264,6 @@ func (s *service) buildSystemPrompt() string {
 	}
 	enforcer := " Respond ONLY with valid minified JSON using this shape: {\"summary\":string,\"clothing\":string[],\"protection\":string[],\"tips\":string[]}. Arrays must contain short actionable strings; if none apply, respond with an empty array. Never return plain text or other fields."
 	return base + enforcer
-}
-
-func (s *service) toolDefinition() chatgpt.Tool {
-	return chatgpt.Tool{
-		Type: "function",
-		Function: chatgpt.ToolFunction{
-			Name:        "get_sg_uv",
-			Description: "Get current ultraviolet (UV) index in Singapore from the official data.gov.sg API and return raw JSON.",
-			Parameters: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"time": map[string]any{
-						"type":        "string",
-						"description": "ISO datetime in Singapore time; if omitted, use now.",
-					},
-				},
-			},
-		},
-	}
-}
-
-type toolArgs struct {
-	Time string `json:"time"`
-}
-
-func (s *service) parseToolArgs(raw string) (toolArgs, error) {
-	var args toolArgs
-	if strings.TrimSpace(raw) == "" {
-		return args, nil
-	}
-	if err := json.Unmarshal([]byte(raw), &args); err != nil {
-		return toolArgs{}, err
-	}
-	return args, nil
-}
-
-func (s *service) parseSingaporeDate(raw string) (string, error) {
-	if strings.TrimSpace(raw) == "" {
-		return "", errors.New("empty time")
-	}
-	ts, err := time.Parse(time.RFC3339, raw)
-	if err != nil {
-		return "", err
-	}
-	return ts.In(s.timezone).Format("2006-01-02"), nil
 }
 
 type adviceWire struct {

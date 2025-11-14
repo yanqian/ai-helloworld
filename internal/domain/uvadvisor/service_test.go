@@ -32,26 +32,6 @@ func TestServiceRecommendSuccess(t *testing.T) {
 				}{
 					{Message: chatgpt.Message{
 						Role:    "assistant",
-						Content: "",
-						ToolCalls: []chatgpt.ToolCall{
-							{
-								ID:   "call-1",
-								Type: "function",
-								Function: chatgpt.ToolCallDefinition{
-									Name:      "get_sg_uv",
-									Arguments: `{"time":"2024-07-01T11:00:00+08:00"}`,
-								},
-							},
-						},
-					}},
-				},
-			},
-			{
-				Choices: []struct {
-					Message chatgpt.Message "json:\"message\""
-				}{
-					{Message: chatgpt.Message{
-						Role:    "assistant",
 						Content: `{"summary":"Sunny day","clothing":["Light linen"],"protection":["SPF 50"],"tips":["Stay hydrated"]}`,
 					}},
 				},
@@ -88,7 +68,7 @@ func TestServiceRecommendSuccess(t *testing.T) {
 	require.Equal(t, []string{"Stay hydrated"}, resp.Tips)
 	require.Len(t, resp.Readings, 2)
 	require.Equal(t, "2024-07-01", uvStub.lastDate)
-	require.Equal(t, 2, chatStub.calls)
+	require.Equal(t, 1, chatStub.calls)
 }
 
 func TestServiceRecommendInvalidDate(t *testing.T) {
