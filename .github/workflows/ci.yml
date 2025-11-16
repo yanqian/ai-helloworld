@@ -66,8 +66,8 @@ jobs:
       GCP_REPOSITORY: ${{ vars.GCP_REPOSITORY }}
       IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_REPOSITORY }}/summarizer:${{ github.sha }}
       FAQ_REDIS_ENABLED: ${{ vars.FAQ_REDIS_ENABLED }}
-      FAQ_REDIS_ADDR: ${{ vars.FAQ_REDIS_ADDR }}
-      FAQ_POSTGRES_DSN: ${{ vars.FAQ_POSTGRES_DSN }}
+      FAQ_REDIS_ADDR: ${{ secrets.FAQ_REDIS_ADDR }}
+      FAQ_POSTGRES_DSN: ${{ secrets.FAQ_POSTGRES_DSN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
