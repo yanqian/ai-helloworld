@@ -6,6 +6,8 @@ This is a full, self-contained spec you can paste directly into your Codex spec 
 
 # FAQ Search Modes Specification (with SearchModeExact)
 
+> **Infra note**: Production instances run on Aiven-managed PostgreSQL (questions table) and Valkey/Redis (KV cache). Connection strings and TLS settings come from the environment/`configs/config.yaml`.
+
 This system supports four search modes:
 
 * **SearchModeExact** – exact text match only

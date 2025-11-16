@@ -132,6 +132,8 @@ Answer a question using one of four lookup strategies (exact, semantic hash, sim
 
 Looking for implementation details? See the [FAQ spec](docs/faq/faq-spec.md) for the ranking heuristics, cache flows, and data contracts shared with the frontend.
 
+Production deployments connect to Aiven-managed Postgres (for long-term FAQ storage) and Valkey/Redis (for the FAQ cache). The defaults in `configs/config.yaml` map directly to that setup—override them only if you run your own databases.
+
 ```bash
 curl --location 'http://localhost:8080/api/v1/faq/search' \
   --header 'Content-Type: application/json' \
