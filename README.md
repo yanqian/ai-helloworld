@@ -124,6 +124,51 @@ Response:
 
 Under the hood the UV advisor uses an OpenAI function call (`get_sg_uv`) so the model explicitly retrieves the latest data.gov.sg payload before composing its JSON summary.
 
+## Smart FAQ API
+
+### POST `/api/v1/faq/search`
+
+Answer a question using one of four lookup strategies (exact, semantic hash, similarity or hybrid). The service checks Redis-backed (or in-memory) caches first, falls back to the LLM if needed, and records the question for the trending list.
+
+```bash
+curl --location 'http://localhost:8080/api/v1/faq/search' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "question": "How far is the moon?",
+    "mode": "hybrid"
+  }'
+```
+
+Response:
+
+```json
+{
+  "question": "How far is the moon?",
+  "matchedQuestion": "How far is the moon?",
+  "answer": "About 384,400 km separate Earth and the Moon.",
+  "source": "cache",
+  "mode": "exact",
+  "recommendations": [
+    { "query": "How far is the moon?", "count": 4 }
+  ]
+}
+```
+
+### GET `/api/v1/faq/trending`
+
+Returns the top 10 most common FAQ searches to power the recommendation list in the UI.
+
+### FAQ Cache Backend
+
+The Smart FAQ service uses a Valkey/Redis-compatible cache before calling the LLM. Enable it by setting `faq.redis.enabled=true` (see `configs/config.yaml` or the `FAQ_REDIS_*` env vars) and point `faq.redis.addr` at your Valkey connection string. The address may be a raw `host:port` pair or a URL (e.g. `rediss://user:pass@hostname:port/db`).
+
+Environment overrides:
+
+- `FAQ_REDIS_ENABLED=true`
+- `FAQ_REDIS_ADDR=rediss://default:***@valkey.example.com:12954`
+
+If the cache is unreachable the service automatically falls back to the in-memory store.
+
 ## Project Layout
 
 - `cmd/app`: Wire setup and entrypoint.

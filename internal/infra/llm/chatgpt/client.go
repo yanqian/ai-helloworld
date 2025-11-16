@@ -39,6 +39,19 @@ type ChatCompletionResponse struct {
 	} `json:"choices"`
 }
 
+// EmbeddingRequest represents an embedding call payload.
+type EmbeddingRequest struct {
+	Model string `json:"model"`
+	Input any    `json:"input"`
+}
+
+// EmbeddingResponse captures the embedding vectors returned by OpenAI.
+type EmbeddingResponse struct {
+	Data []struct {
+		Embedding []float32 `json:"embedding"`
+	} `json:"data"`
+}
+
 // Tool represents a callable function exposed to ChatGPT.
 type Tool struct {
 	Type     string       `json:"type"`
@@ -110,6 +123,19 @@ func (c *Client) CreateChatCompletion(ctx context.Context, req ChatCompletionReq
 	return out, nil
 }
 
+// CreateEmbedding requests an embedding vector from the OpenAI embeddings API.
+func (c *Client) CreateEmbedding(ctx context.Context, req EmbeddingRequest) (EmbeddingResponse, error) {
+	var out EmbeddingResponse
+	body, err := c.doEmbeddingRequest(ctx, req)
+	if err != nil {
+		return out, err
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		return out, fmt.Errorf("decode embedding response: %w", err)
+	}
+	return out, nil
+}
+
 // CreateChatCompletionStream starts a streaming ChatGPT call.
 func (c *Client) CreateChatCompletionStream(ctx context.Context, req ChatCompletionRequest) (Stream, error) {
 	req.Stream = true
@@ -172,6 +198,38 @@ func (c *Client) newHTTPRequest(ctx context.Context, req ChatCompletionRequest) 
 	if req.Stream {
 		httpReq.Header.Set("Accept", "text/event-stream")
 	}
+	return httpReq, nil
+}
+
+func (c *Client) doEmbeddingRequest(ctx context.Context, req EmbeddingRequest) ([]byte, error) {
+	httpReq, err := c.newEmbeddingRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("request embedding: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		payload, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		return nil, fmt.Errorf("embedding request failed: status=%d body=%s", resp.StatusCode, string(payload))
+	}
+	return io.ReadAll(resp.Body)
+}
+
+func (c *Client) newEmbeddingRequest(ctx context.Context, req EmbeddingRequest) (*http.Request, error) {
+	payload, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("encode embedding request: %w", err)
+	}
+	endpoint := c.baseURL + "/embeddings"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("build embedding request: %w", err)
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
 	return httpReq, nil
 }
 

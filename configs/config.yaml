@@ -1,7 +1,7 @@
 http:
   address: ":8080"
-  readTimeout: 10s
-  writeTimeout: 10s
+  readTimeout: 5s
+  writeTimeout: 5s
   rateLimit:
     enabled: true
     requestsPerMinute: 60
@@ -19,8 +19,21 @@ summary:
 uvAdvisor:
   apiBaseUrl: "https://api-open.data.gov.sg/v2/real-time/api/uv"
   prompt: "You are a UV protection stylist for Singapore. Analyze UV readings and keep the response JSON with summary, clothing, protection and tips fields."
+faq:
+  prompt: "You are a helpful knowledge base assistant. Provide concise answers."
+  cacheTtl: 6h
+  topRecommendations: 10
+  similarityThreshold: 0.7
+  redis:
+    enabled: false
+    addr: ""
+  postgres:
+    dsn: ""
+    maxConns: 4
+    minConns: 0
 llm:
   apiKey: ""
   baseUrl: "https://api.openai.com/v1"
   model: "gpt-4o-mini"
+  embeddingModel: "text-embedding-3-small"
   temperature: 0.2

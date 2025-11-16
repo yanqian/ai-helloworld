@@ -28,6 +28,8 @@ func NewRouter(cfg *config.Config, handler *Handler) *http.Server {
 		api.POST("/summaries", handler.Summarize)
 		api.POST("/summaries/stream", handler.SummarizeStream)
 		api.POST("/uv-advice", handler.RecommendProtection)
+		api.POST("/faq/search", handler.SmartFAQ)
+		api.GET("/faq/trending", handler.TrendingFAQ)
 	}
 
 	return &http.Server{

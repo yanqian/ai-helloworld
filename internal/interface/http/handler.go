@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/yanqian/ai-helloworld/internal/domain/faq"
 	"github.com/yanqian/ai-helloworld/internal/domain/summarizer"
 	"github.com/yanqian/ai-helloworld/internal/domain/uvadvisor"
 	apperrors "github.com/yanqian/ai-helloworld/pkg/errors"
@@ -16,14 +17,16 @@ import (
 type Handler struct {
 	summarizerSvc summarizer.Service
 	advisorSvc    uvadvisor.Service
+	faqSvc        faq.Service
 	logger        *slog.Logger
 }
 
 // NewHandler constructs the root HTTP handler.
-func NewHandler(summarySvc summarizer.Service, advisorSvc uvadvisor.Service, logger *slog.Logger) *Handler {
+func NewHandler(summarySvc summarizer.Service, advisorSvc uvadvisor.Service, faqSvc faq.Service, logger *slog.Logger) *Handler {
 	return &Handler{
 		summarizerSvc: summarySvc,
 		advisorSvc:    advisorSvc,
+		faqSvc:        faqSvc,
 		logger:        logger.With("component", "http.handler"),
 	}
 }
@@ -116,6 +119,43 @@ func (h *Handler) RecommendProtection(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+// SmartFAQ answers frequently asked questions using search + caching strategies.
+func (h *Handler) SmartFAQ(c *gin.Context) {
+	var req faq.Request
+	if err := c.ShouldBindJSON(&req); err != nil {
+		abortWithError(c, NewHTTPError(http.StatusBadRequest, "invalid_request", errMessage(err), err))
+		return
+	}
+
+	resp, err := h.faqSvc.Answer(c.Request.Context(), req)
+	if err != nil {
+		status := http.StatusInternalServerError
+		code := "faq_failed"
+		if apperrors.IsCode(err, "invalid_input") {
+			status = http.StatusBadRequest
+			code = "invalid_request"
+		}
+		if apperrors.IsCode(err, "llm_error") {
+			status = http.StatusBadGateway
+			code = "llm_error"
+		}
+		abortWithError(c, NewHTTPError(status, code, errMessage(err), err))
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// TrendingFAQ returns the most common search recommendations.
+func (h *Handler) TrendingFAQ(c *gin.Context) {
+	items, err := h.faqSvc.Trending(c.Request.Context())
+	if err != nil {
+		abortWithError(c, NewHTTPError(http.StatusInternalServerError, "faq_failed", errMessage(err), err))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"recommendations": items})
 }
 
 func errMessage(err error) string {

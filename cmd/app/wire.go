@@ -7,6 +7,7 @@ import (
 	"github.com/google/wire"
 
 	"github.com/yanqian/ai-helloworld/internal/bootstrap"
+	"github.com/yanqian/ai-helloworld/internal/domain/faq"
 	"github.com/yanqian/ai-helloworld/internal/domain/summarizer"
 	"github.com/yanqian/ai-helloworld/internal/domain/uvadvisor"
 	"github.com/yanqian/ai-helloworld/internal/infra/config"
@@ -20,10 +21,14 @@ func initializeApp() (*bootstrap.App, error) {
 		logger.New,
 		provideSummaryConfig,
 		provideUVAdvisorConfig,
+		provideFAQConfig,
 		provideChatGPTClient,
 		provideUVClient,
+		provideFAQRepository,
+		provideFAQStore,
 		summarizer.NewService,
 		uvadvisor.NewService,
+		faq.NewService,
 		httpiface.NewHandler,
 		httpiface.NewRouter,
 		bootstrap.NewApp,

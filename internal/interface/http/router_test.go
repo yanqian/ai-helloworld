@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yanqian/ai-helloworld/internal/domain/faq"
 	"github.com/yanqian/ai-helloworld/internal/domain/summarizer"
 	"github.com/yanqian/ai-helloworld/internal/domain/uvadvisor"
 	"github.com/yanqian/ai-helloworld/internal/infra/config"
@@ -31,7 +32,7 @@ func TestRouter_SummarizeSuccess(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/summaries", `{"text":"hello world"}`, newRouterUnderTest(t, svc, nil))
+	recorder := performRequest("/api/v1/summaries", `{"text":"hello world"}`, newRouterUnderTest(t, svc, nil, nil))
 	require.Equal(t, http.StatusOK, recorder.Code)
 
 	var got summarizer.Response
@@ -42,7 +43,7 @@ func TestRouter_SummarizeSuccess(t *testing.T) {
 func TestRouter_SummarizeInvalidJSON(t *testing.T) {
 	svc := &stubSummarizer{}
 
-	recorder := performRequest("/api/v1/summaries", `{"text":123}`, newRouterUnderTest(t, svc, nil))
+	recorder := performRequest("/api/v1/summaries", `{"text":123}`, newRouterUnderTest(t, svc, nil, nil))
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 
 	errBody := decodeErrorBody(t, recorder.Body.Bytes())
@@ -57,7 +58,7 @@ func TestRouter_SummarizeInvalidInput(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/summaries", `{"text":""}`, newRouterUnderTest(t, svc, nil))
+	recorder := performRequest("/api/v1/summaries", `{"text":""}`, newRouterUnderTest(t, svc, nil, nil))
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 
 	errBody := decodeErrorBody(t, recorder.Body.Bytes())
@@ -84,7 +85,7 @@ func TestRouter_SummarizeStreamSuccess(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/summaries/stream", `{"text":"stream me"}`, newRouterUnderTest(t, svc, nil))
+	recorder := performRequest("/api/v1/summaries/stream", `{"text":"stream me"}`, newRouterUnderTest(t, svc, nil, nil))
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
 
@@ -108,7 +109,7 @@ func TestRouter_SummarizeStreamInvalidInput(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/summaries/stream", `{"text":""}`, newRouterUnderTest(t, svc, nil))
+	recorder := performRequest("/api/v1/summaries/stream", `{"text":""}`, newRouterUnderTest(t, svc, nil, nil))
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 
 	errBody := decodeErrorBody(t, recorder.Body.Bytes())
@@ -117,7 +118,7 @@ func TestRouter_SummarizeStreamInvalidInput(t *testing.T) {
 }
 
 func TestRouter_CORSPreflight(t *testing.T) {
-	server := newRouterUnderTest(t, &stubSummarizer{}, nil)
+	server := newRouterUnderTest(t, &stubSummarizer{}, nil, nil)
 
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/summaries", nil)
 	recorder := httptest.NewRecorder()
@@ -142,7 +143,7 @@ func TestRouter_RetryOnTransientFailure(t *testing.T) {
 		},
 	}
 
-	server := newRouterUnderTest(t, svc, nil, func(cfg *config.Config) {
+	server := newRouterUnderTest(t, svc, nil, nil, func(cfg *config.Config) {
 		cfg.HTTP.Retry.Enabled = true
 		cfg.HTTP.Retry.MaxAttempts = 2
 		cfg.HTTP.Retry.BaseBackoff = 0
@@ -154,7 +155,7 @@ func TestRouter_RetryOnTransientFailure(t *testing.T) {
 }
 
 func TestRouter_RateLimitExceeded(t *testing.T) {
-	server := newRouterUnderTest(t, &stubSummarizer{}, nil, func(cfg *config.Config) {
+	server := newRouterUnderTest(t, &stubSummarizer{}, nil, nil, func(cfg *config.Config) {
 		cfg.HTTP.RateLimit.Enabled = true
 		cfg.HTTP.RateLimit.RequestsPerMinute = 1
 		cfg.HTTP.RateLimit.Burst = 1
@@ -202,8 +203,18 @@ func TestRateLimitMiddlewareBlocks(t *testing.T) {
 }
 
 func performRequest(path, body string, server *http.Server) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
+	return performJSONRequest(http.MethodPost, path, body, server)
+}
+
+func performJSONRequest(method, path, body string, server *http.Server) *httptest.ResponseRecorder {
+	var payload io.Reader
+	if body != "" {
+		payload = bytes.NewBufferString(body)
+	}
+	req := httptest.NewRequest(method, path, payload)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("X-Forwarded-For", "203.0.113.10")
 	req.RemoteAddr = "203.0.113.1:1234"
 	rec := httptest.NewRecorder()
@@ -220,7 +231,7 @@ func TestRouter_UVAdviceSuccess(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/uv-advice", `{"date":"2024-07-01"}`, newRouterUnderTest(t, &stubSummarizer{}, svc))
+	recorder := performRequest("/api/v1/uv-advice", `{"date":"2024-07-01"}`, newRouterUnderTest(t, &stubSummarizer{}, svc, nil))
 	require.Equal(t, http.StatusOK, recorder.Code)
 
 	var resp uvadvisor.Response
@@ -230,7 +241,7 @@ func TestRouter_UVAdviceSuccess(t *testing.T) {
 }
 
 func TestRouter_UVAdviceInvalidJSON(t *testing.T) {
-	recorder := performRequest("/api/v1/uv-advice", `{"date":123}`, newRouterUnderTest(t, &stubSummarizer{}, &stubUVAdvisor{}))
+	recorder := performRequest("/api/v1/uv-advice", `{"date":123}`, newRouterUnderTest(t, &stubSummarizer{}, &stubUVAdvisor{}, nil))
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
@@ -240,19 +251,56 @@ func TestRouter_UVAdviceUpstreamError(t *testing.T) {
 			return uvadvisor.Response{}, apperrors.Wrap("uv_data_error", "upstream unavailable", nil)
 		},
 	}
-	recorder := performRequest("/api/v1/uv-advice", `{}`, newRouterUnderTest(t, &stubSummarizer{}, svc))
+	recorder := performRequest("/api/v1/uv-advice", `{}`, newRouterUnderTest(t, &stubSummarizer{}, svc, nil))
 	require.Equal(t, http.StatusBadGateway, recorder.Code)
 
 	errBody := decodeErrorBody(t, recorder.Body.Bytes())
 	require.Equal(t, "uv_advice_failed", errBody["error"]["code"])
 }
 
-func newRouterUnderTest(t *testing.T, summarySvc summarizer.Service, advisorSvc uvadvisor.Service, overrides ...func(*config.Config)) *http.Server {
+func TestRouter_FAQSearchSuccess(t *testing.T) {
+	expected := faq.Response{Answer: "The moon is about 384,400 km away.", Source: "cache"}
+	faqSvc := &stubFAQ{
+		answerFn: func(ctx context.Context, req faq.Request) (faq.Response, error) {
+			require.Equal(t, "How far is the moon?", req.Question)
+			return expected, nil
+		},
+	}
+	recorder := performRequest("/api/v1/faq/search", `{"question":"How far is the moon?"}`, newRouterUnderTest(t, &stubSummarizer{}, nil, faqSvc))
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp faq.Response
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, expected.Answer, resp.Answer)
+	require.Equal(t, expected.Source, resp.Source)
+}
+
+func TestRouter_FAQTrending(t *testing.T) {
+	faqSvc := &stubFAQ{
+		trendingFn: func(ctx context.Context) ([]faq.TrendingQuery, error) {
+			return []faq.TrendingQuery{{Query: "Question", Count: 3}}, nil
+		},
+	}
+	recorder := performJSONRequest(http.MethodGet, "/api/v1/faq/trending", "", newRouterUnderTest(t, &stubSummarizer{}, nil, faqSvc))
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var body struct {
+		Recommendations []faq.TrendingQuery `json:"recommendations"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	require.Len(t, body.Recommendations, 1)
+	require.Equal(t, int64(3), body.Recommendations[0].Count)
+}
+
+func newRouterUnderTest(t *testing.T, summarySvc summarizer.Service, advisorSvc uvadvisor.Service, faqSvc faq.Service, overrides ...func(*config.Config)) *http.Server {
 	t.Helper()
 	if advisorSvc == nil {
 		advisorSvc = &stubUVAdvisor{}
 	}
-	handler := NewHandler(summarySvc, advisorSvc, newTestLogger())
+	if faqSvc == nil {
+		faqSvc = &stubFAQ{}
+	}
+	handler := NewHandler(summarySvc, advisorSvc, faqSvc, newTestLogger())
 	cfg := &config.Config{
 		HTTP: config.HTTPConfig{
 			Address:      ":0",
@@ -307,6 +355,25 @@ func (s *stubUVAdvisor) Recommend(ctx context.Context, req uvadvisor.Request) (u
 		return s.recommendFn(ctx, req)
 	}
 	return uvadvisor.Response{}, nil
+}
+
+type stubFAQ struct {
+	answerFn   func(ctx context.Context, req faq.Request) (faq.Response, error)
+	trendingFn func(ctx context.Context) ([]faq.TrendingQuery, error)
+}
+
+func (s *stubFAQ) Answer(ctx context.Context, req faq.Request) (faq.Response, error) {
+	if s.answerFn != nil {
+		return s.answerFn(ctx, req)
+	}
+	return faq.Response{}, nil
+}
+
+func (s *stubFAQ) Trending(ctx context.Context) ([]faq.TrendingQuery, error) {
+	if s.trendingFn != nil {
+		return s.trendingFn(ctx)
+	}
+	return nil, nil
 }
 
 func decodeErrorBody(t *testing.T, raw []byte) map[string]map[string]string {
