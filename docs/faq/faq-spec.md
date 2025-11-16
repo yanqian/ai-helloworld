@@ -22,10 +22,11 @@ Every mode attempts to reuse cached answers if possible; otherwise it inserts th
 ### 1.1 `questions` table (Postgres)
 
 ```sql
+CREATE EXTENSION IF NOT EXISTS vector; -- 在数据库里启用 extension
 CREATE TABLE questions (
     id              BIGSERIAL PRIMARY KEY,
     question_text   TEXT NOT NULL,
-    embedding       VECTOR(<dim>) NOT NULL,     -- OpenAI embedding vector
+    embedding       VECTOR(1536) NOT NULL,     -- OpenAI embedding vector, small 1536, large 3072, large-v2 4096
     semantic_hash   BIGINT                      -- used only for SemanticHash mode
 );
 ```

@@ -130,6 +130,8 @@ Under the hood the UV advisor uses an OpenAI function call (`get_sg_uv`) so the 
 
 Answer a question using one of four lookup strategies (exact, semantic hash, similarity or hybrid). The service checks Redis-backed (or in-memory) caches first, falls back to the LLM if needed, and records the question for the trending list.
 
+Looking for implementation details? See the [FAQ spec](docs/faq/faq-spec.md) for the ranking heuristics, cache flows, and data contracts shared with the frontend.
+
 ```bash
 curl --location 'http://localhost:8080/api/v1/faq/search' \
   --header 'Content-Type: application/json' \
