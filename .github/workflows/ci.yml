@@ -65,6 +65,9 @@ jobs:
       CLOUD_RUN_SERVICE: summarizer
       GCP_REPOSITORY: ${{ vars.GCP_REPOSITORY }}
       IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_REPOSITORY }}/summarizer:${{ github.sha }}
+      FAQ_REDIS_ENABLED: ${{ vars.FAQ_REDIS_ENABLED }}
+      FAQ_REDIS_ADDR: ${{ vars.FAQ_REDIS_ADDR }}
+      FAQ_POSTGRES_DSN: ${{ vars.FAQ_POSTGRES_DSN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -95,6 +98,6 @@ jobs:
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
             --platform managed \
-            --set-env-vars "LLM_API_KEY=${{ secrets.LLM_API_KEY }}" \
+            --set-env-vars "LLM_API_KEY=${{ secrets.LLM_API_KEY }},FAQ_REDIS_ENABLED=${FAQ_REDIS_ENABLED},FAQ_REDIS_ADDR=${FAQ_REDIS_ADDR},FAQ_POSTGRES_DSN=${FAQ_POSTGRES_DSN}" \
             --allow-unauthenticated \
             --quiet

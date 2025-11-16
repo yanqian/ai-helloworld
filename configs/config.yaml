@@ -26,11 +26,11 @@ faq:
   similarityThreshold: 0.7
   redis:
     enabled: false
-    addr: ""
+    addr: "" # set in the environment variable FAQ_REDIS_ADDR in production
   postgres:
-    dsn: ""
-    maxConns: 4
-    minConns: 0
+    dsn: "" # set in the environment variable FAQ_POSTGRES_DSN in production
+    maxConns: 10 # keep below Cloud SQL limits while handling concurrent traffic
+    minConns: 2  # keep a couple of warm connections for faster cold starts
 llm:
   apiKey: ""
   baseUrl: "https://api.openai.com/v1"

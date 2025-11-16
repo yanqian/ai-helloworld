@@ -273,8 +273,8 @@ func defaultConfig() *Config {
 			},
 			Postgres: PostgresConfig{
 				DSN:      "",
-				MaxConns: 4,
-				MinConns: 0,
+				MaxConns: 10,
+				MinConns: 2,
 			},
 		},
 	}
