@@ -78,18 +78,41 @@ func (s *ValkeyStore) TopQueries(ctx context.Context, limit int) ([]faq.Trending
 		}
 		return nil, err
 	}
-	out := make([]faq.TrendingQuery, 0, len(arr)/2)
-	for i := 0; i+1 < len(arr); i += 2 {
-		member, err := arr[i].ToString()
-		if err != nil {
-			if valkey.IsValkeyNil(err) {
-				continue
+	out := make([]faq.TrendingQuery, 0, len(arr))
+	for i := 0; i < len(arr); {
+		var (
+			member string
+			score  float64
+		)
+		if tuple, tupleErr := arr[i].ToArray(); tupleErr == nil && len(tuple) == 2 {
+			// RESP3 returns [member, score] per element
+			if member, err = tuple[0].ToString(); err != nil {
+				if valkey.IsValkeyNil(err) {
+					i++
+					continue
+				}
+				return nil, err
 			}
-			return nil, err
-		}
-		score, err := arr[i+1].ToFloat64()
-		if err != nil {
-			return nil, err
+			if score, err = tuple[1].ToFloat64(); err != nil {
+				return nil, err
+			}
+			i++
+		} else {
+			// RESP2 returns a flat alternating array.
+			if i+1 >= len(arr) {
+				break
+			}
+			if member, err = arr[i].ToString(); err != nil {
+				if valkey.IsValkeyNil(err) {
+					i += 2
+					continue
+				}
+				return nil, err
+			}
+			if score, err = arr[i+1].ToFloat64(); err != nil {
+				return nil, err
+			}
+			i += 2
 		}
 		display := s.fetchDisplay(ctx, member)
 		out = append(out, faq.TrendingQuery{Query: display, Count: int64(score)})
