@@ -19,17 +19,29 @@ func NewRouter(cfg *config.Config, handler *Handler) *http.Server {
 		gin.Recovery(),
 		errorHandlingMiddleware(handler.logger),
 		requestLogger(handler.logger),
-		corsMiddleware(),
+		corsMiddleware(cfg.HTTP.AllowedOrigins),
 		rateLimitMiddleware(cfg.HTTP.RateLimit, handler.logger),
 	)
 
 	api := router.Group("/api/v1")
 	{
-		api.POST("/summaries", handler.Summarize)
-		api.POST("/summaries/stream", handler.SummarizeStream)
-		api.POST("/uv-advice", handler.RecommendProtection)
-		api.POST("/faq/search", handler.SmartFAQ)
-		api.GET("/faq/trending", handler.TrendingFAQ)
+		authRoutes := api.Group("/auth")
+		{
+			authRoutes.POST("/register", handler.Register)
+			authRoutes.POST("/login", handler.Login)
+			authRoutes.POST("/refresh", handler.Refresh)
+		}
+
+		protected := api.Group("/")
+		protected.Use(authMiddleware(handler.authSvc))
+		{
+			protected.POST("/summaries", handler.Summarize)
+			protected.POST("/summaries/stream", handler.SummarizeStream)
+			protected.POST("/uv-advice", handler.RecommendProtection)
+			protected.POST("/faq/search", handler.SmartFAQ)
+			protected.GET("/faq/trending", handler.TrendingFAQ)
+			protected.GET("/auth/me", handler.Profile)
+		}
 	}
 
 	return &http.Server{

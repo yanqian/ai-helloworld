@@ -10,6 +10,7 @@ go mod download
 
 # Export required env vars
 export LLM_API_KEY=sk-your-openai-key
+export JWT_SECRET=replace-this-with-a-secure-secret
 # Optional tweaks:
 # export LLM_BASE_URL=https://api.openai.com/v1
 # export LLM_MODEL=gpt-4o-mini
@@ -23,6 +24,50 @@ Configuration values come from environment variables, `configs/config.yaml`, or 
 
 ## API Usage
 
+### Authentication
+
+Register once with an email/password/nickname (nickname must be <=10 letters). The backend hashes passwords and returns both an access token (1h TTL) plus a refresh token (24h TTL by default). Refresh tokens are exchanged silently by the frontend whenever the access token expires.
+
+```bash
+curl --location 'http://localhost:8080/api/v1/auth/register' \
+  --header 'Content-Type: application/json' \
+  --data '{"email":"user@example.com","password":"password123","nickname":"CodeStar"}'
+
+TOKEN=$(curl --silent --location 'http://localhost:8080/api/v1/auth/login' \
+  --header 'Content-Type: application/json' \
+  --data '{"email":"user@example.com","password":"password123"}')
+
+ACCESS_TOKEN=$(echo "$TOKEN" | jq -r '.token')
+REFRESH_TOKEN=$(echo "$TOKEN" | jq -r '.refreshToken')
+```
+
+You can verify a token (and fetch the greeting shown on the dashboard) with:
+
+```bash
+curl --location 'http://localhost:8080/api/v1/auth/me' \
+  --header "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+Response:
+
+```json
+{
+  "message": "Welcome to the private dashboard",
+  "user": {
+    "email": "user@example.com",
+    "nickname": "CodeStar"
+  }
+}
+```
+
+If the access token expires you can manually refresh it (the frontend handles this automatically):
+
+```bash
+curl --location 'http://localhost:8080/api/v1/auth/refresh' \
+  --header 'Content-Type: application/json' \
+  --data "{\"refreshToken\":\"$REFRESH_TOKEN\"}"
+```
+
 ### POST `/api/v1/summaries`
 
 Sync summarization; returns a JSON payload with `summary` and `keywords`.
@@ -30,6 +75,7 @@ Sync summarization; returns a JSON payload with `summary` and `keywords`.
 ```bash
 curl --location 'http://localhost:8080/api/v1/summaries' \
   --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
   --data '{
     "text": "Long input goes here...",
     "prompt": "Optional prompt override"
@@ -52,6 +98,7 @@ Streams partial summaries as Server-Sent Events (SSE). Use `curl -N` (no bufferi
 ```bash
 curl -N --location 'http://localhost:8080/api/v1/summaries/stream' \
   --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
   --data '{
     "text": "Same input as sync endpoint"
   }'
@@ -80,7 +127,7 @@ All errors use:
 
 ## Tips & Operational Notes
 
-- **Auth**: `LLM_API_KEY` is mandatory; requests fail if it’s empty.
+- **Auth**: `JWT_SECRET` secures login tokens and `LLM_API_KEY` is mandatory for LLM access. The `/login` frontend route captures email/password/nickname, stores both tokens plus the nickname in `localStorage`, and silently exchanges refresh tokens when the access token expires.
 - **Prompt overrides**: Provide `prompt` in the request body to customize ChatGPT instructions; otherwise the default prompt in config is used.
 - **Logging**: Set `LOG_LEVEL=debug` to see raw LLM responses (logged before parsing). Logs are JSON to stdout.
 - **Timeouts**: HTTP read/write timeouts are configurable under the `http` section in config; ensure they exceed typical LLM latency.
@@ -97,6 +144,7 @@ Fetches UV readings from data.gov.sg (or a custom `UV_API_BASE_URL`) and asks Ch
 ```bash
 curl --location 'http://localhost:8080/api/v1/uv-advice' \
   --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
   --data '{
     "date": "2024-07-01"
   }'
@@ -137,6 +185,7 @@ Production deployments connect to Aiven-managed Postgres (for long-term FAQ stor
 ```bash
 curl --location 'http://localhost:8080/api/v1/faq/search' \
   --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer $ACCESS_TOKEN" \
   --data '{
     "question": "How far is the moon?",
     "mode": "hybrid"

@@ -10,6 +10,7 @@ on:
 env:
   GOFLAGS: -mod=readonly
   GOCACHE: ${{ github.workspace }}/.gocache
+  JWT_SECRET: ${{ secrets.JWT_SECRET }}
 
 jobs:
   lint:
@@ -98,6 +99,6 @@ jobs:
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
             --platform managed \
-            --set-env-vars "LLM_API_KEY=${{ secrets.LLM_API_KEY }},FAQ_REDIS_ENABLED=${FAQ_REDIS_ENABLED},FAQ_REDIS_ADDR=${FAQ_REDIS_ADDR},FAQ_POSTGRES_DSN=${FAQ_POSTGRES_DSN}" \
+            --set-env-vars "LLM_API_KEY=${{ secrets.LLM_API_KEY }},FAQ_REDIS_ENABLED=${FAQ_REDIS_ENABLED},FAQ_REDIS_ADDR=${FAQ_REDIS_ADDR},FAQ_POSTGRES_DSN=${FAQ_POSTGRES_DSN},JWT_SECRET=${{ secrets.JWT_SECRET }}" \
             --allow-unauthenticated \
             --quiet

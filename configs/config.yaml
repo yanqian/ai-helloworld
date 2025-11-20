@@ -2,6 +2,8 @@ http:
   address: ":8080"
   readTimeout: 5s
   writeTimeout: 5s
+  allowedOrigins:
+    - "*"
   rateLimit:
     enabled: true
     requestsPerMinute: 60
@@ -12,6 +14,9 @@ http:
     baseBackoff: 150ms
     exclude:
       - "/api/v1/summaries/stream"
+      - "/api/v1/auth/login"
+      - "/api/v1/auth/register"
+      - "/api/v1/auth/refresh"
 summary:
   maxSummaryLen: 220
   maxKeywords: 6
@@ -37,3 +42,11 @@ llm:
   model: "gpt-4o-mini"
   embeddingModel: "text-embedding-3-small"
   temperature: 0.2
+auth:
+  jwtSecret: "" # set via JWT_SECRET
+  accessTokenTtl: 1h
+  refreshTokenTtl: 24h
+  postgres:
+    dsn: "" # set via AUTH_POSTGRES_DSN in production
+    maxConns: 5
+    minConns: 1

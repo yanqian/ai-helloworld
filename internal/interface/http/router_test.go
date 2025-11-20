@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/yanqian/ai-helloworld/internal/domain/auth"
 	"github.com/yanqian/ai-helloworld/internal/domain/faq"
 	"github.com/yanqian/ai-helloworld/internal/domain/summarizer"
 	"github.com/yanqian/ai-helloworld/internal/domain/uvadvisor"
@@ -32,7 +33,7 @@ func TestRouter_SummarizeSuccess(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/summaries", `{"text":"hello world"}`, newRouterUnderTest(t, svc, nil, nil))
+	recorder := performRequest("/api/v1/summaries", `{"text":"hello world"}`, newRouterUnderTest(t, svc, nil, nil, nil))
 	require.Equal(t, http.StatusOK, recorder.Code)
 
 	var got summarizer.Response
@@ -43,7 +44,7 @@ func TestRouter_SummarizeSuccess(t *testing.T) {
 func TestRouter_SummarizeInvalidJSON(t *testing.T) {
 	svc := &stubSummarizer{}
 
-	recorder := performRequest("/api/v1/summaries", `{"text":123}`, newRouterUnderTest(t, svc, nil, nil))
+	recorder := performRequest("/api/v1/summaries", `{"text":123}`, newRouterUnderTest(t, svc, nil, nil, nil))
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 
 	errBody := decodeErrorBody(t, recorder.Body.Bytes())
@@ -58,7 +59,7 @@ func TestRouter_SummarizeInvalidInput(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/summaries", `{"text":""}`, newRouterUnderTest(t, svc, nil, nil))
+	recorder := performRequest("/api/v1/summaries", `{"text":""}`, newRouterUnderTest(t, svc, nil, nil, nil))
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 
 	errBody := decodeErrorBody(t, recorder.Body.Bytes())
@@ -85,7 +86,7 @@ func TestRouter_SummarizeStreamSuccess(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/summaries/stream", `{"text":"stream me"}`, newRouterUnderTest(t, svc, nil, nil))
+	recorder := performRequest("/api/v1/summaries/stream", `{"text":"stream me"}`, newRouterUnderTest(t, svc, nil, nil, nil))
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
 
@@ -109,7 +110,7 @@ func TestRouter_SummarizeStreamInvalidInput(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/summaries/stream", `{"text":""}`, newRouterUnderTest(t, svc, nil, nil))
+	recorder := performRequest("/api/v1/summaries/stream", `{"text":""}`, newRouterUnderTest(t, svc, nil, nil, nil))
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 
 	errBody := decodeErrorBody(t, recorder.Body.Bytes())
@@ -118,7 +119,7 @@ func TestRouter_SummarizeStreamInvalidInput(t *testing.T) {
 }
 
 func TestRouter_CORSPreflight(t *testing.T) {
-	server := newRouterUnderTest(t, &stubSummarizer{}, nil, nil)
+	server := newRouterUnderTest(t, &stubSummarizer{}, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodOptions, "/api/v1/summaries", nil)
 	recorder := httptest.NewRecorder()
@@ -127,8 +128,100 @@ func TestRouter_CORSPreflight(t *testing.T) {
 
 	require.Equal(t, http.StatusNoContent, recorder.Code)
 	require.Equal(t, "*", recorder.Header().Get("Access-Control-Allow-Origin"))
-	require.Equal(t, "POST, OPTIONS", recorder.Header().Get("Access-Control-Allow-Methods"))
-	require.Equal(t, "Content-Type", recorder.Header().Get("Access-Control-Allow-Headers"))
+	require.Equal(t, "GET, POST, OPTIONS", recorder.Header().Get("Access-Control-Allow-Methods"))
+	require.Equal(t, "Content-Type, Authorization", recorder.Header().Get("Access-Control-Allow-Headers"))
+}
+
+func TestRouter_RegisterSuccess(t *testing.T) {
+	authSvc := &stubAuth{
+		registerFn: func(ctx context.Context, req auth.RegisterRequest) (auth.UserView, error) {
+			require.Equal(t, "user@example.com", req.Email)
+			require.Equal(t, "password123", req.Password)
+			require.Equal(t, "Nickname", req.Nickname)
+			return auth.UserView{ID: 42, Email: req.Email, Nickname: req.Nickname}, nil
+		},
+	}
+	recorder := performRequest("/api/v1/auth/register", `{"email":"user@example.com","password":"password123","nickname":"Nickname"}`, newRouterUnderTest(t, &stubSummarizer{}, nil, nil, authSvc))
+	require.Equal(t, http.StatusCreated, recorder.Code)
+
+	var body struct {
+		Message string        `json:"message"`
+		User    auth.UserView `json:"user"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	require.Equal(t, "User registered successfully", body.Message)
+	require.Equal(t, "user@example.com", body.User.Email)
+	require.Equal(t, "Nickname", body.User.Nickname)
+}
+
+func TestRouter_LoginInvalidCredentials(t *testing.T) {
+	authSvc := &stubAuth{
+		loginFn: func(ctx context.Context, req auth.LoginRequest) (auth.LoginResponse, error) {
+			return auth.LoginResponse{}, apperrors.Wrap("invalid_credentials", "invalid", nil)
+		},
+	}
+	recorder := performRequest("/api/v1/auth/login", `{"email":"user@example.com","password":"wrong"}`, newRouterUnderTest(t, &stubSummarizer{}, nil, nil, authSvc))
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+
+	errBody := decodeErrorBody(t, recorder.Body.Bytes())
+	require.Equal(t, "invalid_credentials", errBody["error"]["code"])
+}
+
+func TestRouter_RefreshSuccess(t *testing.T) {
+	authSvc := &stubAuth{
+		refreshFn: func(ctx context.Context, token string) (auth.LoginResponse, error) {
+			require.Equal(t, "refresh-token", token)
+			return auth.LoginResponse{Token: "new-token", RefreshToken: "new-refresh", User: auth.UserView{Email: "user@example.com", Nickname: "Nick"}}, nil
+		},
+	}
+	recorder := performRequest("/api/v1/auth/refresh", `{"refreshToken":"refresh-token"}`, newRouterUnderTest(t, &stubSummarizer{}, nil, nil, authSvc))
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp auth.LoginResponse
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.Equal(t, "new-token", resp.Token)
+	require.Equal(t, "new-refresh", resp.RefreshToken)
+}
+
+func TestRouter_RefreshInvalid(t *testing.T) {
+	authSvc := &stubAuth{
+		refreshFn: func(ctx context.Context, token string) (auth.LoginResponse, error) {
+			return auth.LoginResponse{}, apperrors.Wrap("invalid_token", "expired", nil)
+		},
+	}
+	recorder := performRequest("/api/v1/auth/refresh", `{"refreshToken":"bad"}`, newRouterUnderTest(t, &stubSummarizer{}, nil, nil, authSvc))
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+
+	errBody := decodeErrorBody(t, recorder.Body.Bytes())
+	require.Equal(t, "invalid_token", errBody["error"]["code"])
+}
+
+func TestRouter_ProtectedRequiresAuth(t *testing.T) {
+	server := newRouterUnderTest(t, &stubSummarizer{}, nil, nil, nil)
+	recorder := performJSONRequest(http.MethodPost, "/api/v1/summaries", `{"text":"hello"}`, server, withoutAuth())
+	require.Equal(t, http.StatusUnauthorized, recorder.Code)
+
+	errBody := decodeErrorBody(t, recorder.Body.Bytes())
+	require.Equal(t, "unauthorized", errBody["error"]["code"])
+}
+
+func TestRouter_Profile(t *testing.T) {
+	authSvc := &stubAuth{
+		validateFn: func(ctx context.Context, token string) (auth.Claims, error) {
+			return auth.Claims{UserID: 99, Email: "me@example.com", ExpiresAt: time.Now().Add(time.Hour)}, nil
+		},
+		profileFn: func(ctx context.Context, userID int64) (auth.UserView, error) {
+			return auth.UserView{ID: userID, Email: "me@example.com", Nickname: "MeNick"}, nil
+		},
+	}
+	recorder := performJSONRequest(http.MethodGet, "/api/v1/auth/me", "", newRouterUnderTest(t, &stubSummarizer{}, nil, nil, authSvc))
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var body struct {
+		User auth.UserView `json:"user"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+	require.Equal(t, "MeNick", body.User.Nickname)
 }
 
 func TestRouter_RetryOnTransientFailure(t *testing.T) {
@@ -143,7 +236,7 @@ func TestRouter_RetryOnTransientFailure(t *testing.T) {
 		},
 	}
 
-	server := newRouterUnderTest(t, svc, nil, nil, func(cfg *config.Config) {
+	server := newRouterUnderTest(t, svc, nil, nil, nil, func(cfg *config.Config) {
 		cfg.HTTP.Retry.Enabled = true
 		cfg.HTTP.Retry.MaxAttempts = 2
 		cfg.HTTP.Retry.BaseBackoff = 0
@@ -155,7 +248,7 @@ func TestRouter_RetryOnTransientFailure(t *testing.T) {
 }
 
 func TestRouter_RateLimitExceeded(t *testing.T) {
-	server := newRouterUnderTest(t, &stubSummarizer{}, nil, nil, func(cfg *config.Config) {
+	server := newRouterUnderTest(t, &stubSummarizer{}, nil, nil, nil, func(cfg *config.Config) {
 		cfg.HTTP.RateLimit.Enabled = true
 		cfg.HTTP.RateLimit.RequestsPerMinute = 1
 		cfg.HTTP.RateLimit.Burst = 1
@@ -206,7 +299,7 @@ func performRequest(path, body string, server *http.Server) *httptest.ResponseRe
 	return performJSONRequest(http.MethodPost, path, body, server)
 }
 
-func performJSONRequest(method, path, body string, server *http.Server) *httptest.ResponseRecorder {
+func performJSONRequest(method, path, body string, server *http.Server, opts ...requestOption) *httptest.ResponseRecorder {
 	var payload io.Reader
 	if body != "" {
 		payload = bytes.NewBufferString(body)
@@ -217,9 +310,33 @@ func performJSONRequest(method, path, body string, server *http.Server) *httptes
 	}
 	req.Header.Set("X-Forwarded-For", "203.0.113.10")
 	req.RemoteAddr = "203.0.113.1:1234"
+	req.Header.Set("Authorization", "Bearer "+defaultAuthToken)
+	for _, opt := range opts {
+		opt(req)
+	}
 	rec := httptest.NewRecorder()
 	server.Handler.ServeHTTP(rec, req)
 	return rec
+}
+
+const defaultAuthToken = "valid-token"
+
+type requestOption func(req *http.Request)
+
+func withoutAuth() requestOption {
+	return func(req *http.Request) {
+		req.Header.Del("Authorization")
+	}
+}
+
+func withAuthToken(token string) requestOption {
+	return func(req *http.Request) {
+		if token == "" {
+			req.Header.Del("Authorization")
+			return
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 }
 
 func TestRouter_UVAdviceSuccess(t *testing.T) {
@@ -231,7 +348,7 @@ func TestRouter_UVAdviceSuccess(t *testing.T) {
 		},
 	}
 
-	recorder := performRequest("/api/v1/uv-advice", `{"date":"2024-07-01"}`, newRouterUnderTest(t, &stubSummarizer{}, svc, nil))
+	recorder := performRequest("/api/v1/uv-advice", `{"date":"2024-07-01"}`, newRouterUnderTest(t, &stubSummarizer{}, svc, nil, nil))
 	require.Equal(t, http.StatusOK, recorder.Code)
 
 	var resp uvadvisor.Response
@@ -241,7 +358,7 @@ func TestRouter_UVAdviceSuccess(t *testing.T) {
 }
 
 func TestRouter_UVAdviceInvalidJSON(t *testing.T) {
-	recorder := performRequest("/api/v1/uv-advice", `{"date":123}`, newRouterUnderTest(t, &stubSummarizer{}, &stubUVAdvisor{}, nil))
+	recorder := performRequest("/api/v1/uv-advice", `{"date":123}`, newRouterUnderTest(t, &stubSummarizer{}, &stubUVAdvisor{}, nil, nil))
 	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
@@ -251,7 +368,7 @@ func TestRouter_UVAdviceUpstreamError(t *testing.T) {
 			return uvadvisor.Response{}, apperrors.Wrap("uv_data_error", "upstream unavailable", nil)
 		},
 	}
-	recorder := performRequest("/api/v1/uv-advice", `{}`, newRouterUnderTest(t, &stubSummarizer{}, svc, nil))
+	recorder := performRequest("/api/v1/uv-advice", `{}`, newRouterUnderTest(t, &stubSummarizer{}, svc, nil, nil))
 	require.Equal(t, http.StatusBadGateway, recorder.Code)
 
 	errBody := decodeErrorBody(t, recorder.Body.Bytes())
@@ -266,7 +383,7 @@ func TestRouter_FAQSearchSuccess(t *testing.T) {
 			return expected, nil
 		},
 	}
-	recorder := performRequest("/api/v1/faq/search", `{"question":"How far is the moon?"}`, newRouterUnderTest(t, &stubSummarizer{}, nil, faqSvc))
+	recorder := performRequest("/api/v1/faq/search", `{"question":"How far is the moon?"}`, newRouterUnderTest(t, &stubSummarizer{}, nil, faqSvc, nil))
 	require.Equal(t, http.StatusOK, recorder.Code)
 
 	var resp faq.Response
@@ -281,7 +398,7 @@ func TestRouter_FAQTrending(t *testing.T) {
 			return []faq.TrendingQuery{{Query: "Question", Count: 3}}, nil
 		},
 	}
-	recorder := performJSONRequest(http.MethodGet, "/api/v1/faq/trending", "", newRouterUnderTest(t, &stubSummarizer{}, nil, faqSvc))
+	recorder := performJSONRequest(http.MethodGet, "/api/v1/faq/trending", "", newRouterUnderTest(t, &stubSummarizer{}, nil, faqSvc, nil))
 	require.Equal(t, http.StatusOK, recorder.Code)
 
 	var body struct {
@@ -292,15 +409,31 @@ func TestRouter_FAQTrending(t *testing.T) {
 	require.Equal(t, int64(3), body.Recommendations[0].Count)
 }
 
-func newRouterUnderTest(t *testing.T, summarySvc summarizer.Service, advisorSvc uvadvisor.Service, faqSvc faq.Service, overrides ...func(*config.Config)) *http.Server {
+func newRouterUnderTest(t *testing.T, summarySvc summarizer.Service, advisorSvc uvadvisor.Service, faqSvc faq.Service, authSvc auth.Service, overrides ...func(*config.Config)) *http.Server {
 	t.Helper()
+	if summarySvc == nil {
+		summarySvc = &stubSummarizer{}
+	}
 	if advisorSvc == nil {
 		advisorSvc = &stubUVAdvisor{}
 	}
 	if faqSvc == nil {
 		faqSvc = &stubFAQ{}
 	}
-	handler := NewHandler(summarySvc, advisorSvc, faqSvc, newTestLogger())
+	if authSvc == nil {
+		authSvc = &stubAuth{
+			validateFn: func(ctx context.Context, token string) (auth.Claims, error) {
+				if token != defaultAuthToken {
+					return auth.Claims{}, apperrors.Wrap("invalid_token", "invalid token", nil)
+				}
+				return auth.Claims{UserID: 1, Email: "tester@example.com", ExpiresAt: time.Now().Add(time.Hour)}, nil
+			},
+			profileFn: func(ctx context.Context, userID int64) (auth.UserView, error) {
+				return auth.UserView{ID: userID, Email: "tester@example.com", Nickname: "Tester"}, nil
+			},
+		}
+	}
+	handler := NewHandler(summarySvc, advisorSvc, faqSvc, authSvc, newTestLogger())
 	cfg := &config.Config{
 		HTTP: config.HTTPConfig{
 			Address:      ":0",
@@ -374,6 +507,49 @@ func (s *stubFAQ) Trending(ctx context.Context) ([]faq.TrendingQuery, error) {
 		return s.trendingFn(ctx)
 	}
 	return nil, nil
+}
+
+type stubAuth struct {
+	registerFn func(ctx context.Context, req auth.RegisterRequest) (auth.UserView, error)
+	loginFn    func(ctx context.Context, req auth.LoginRequest) (auth.LoginResponse, error)
+	refreshFn  func(ctx context.Context, token string) (auth.LoginResponse, error)
+	validateFn func(ctx context.Context, token string) (auth.Claims, error)
+	profileFn  func(ctx context.Context, userID int64) (auth.UserView, error)
+}
+
+func (s *stubAuth) Register(ctx context.Context, req auth.RegisterRequest) (auth.UserView, error) {
+	if s.registerFn != nil {
+		return s.registerFn(ctx, req)
+	}
+	return auth.UserView{}, nil
+}
+
+func (s *stubAuth) Login(ctx context.Context, req auth.LoginRequest) (auth.LoginResponse, error) {
+	if s.loginFn != nil {
+		return s.loginFn(ctx, req)
+	}
+	return auth.LoginResponse{}, nil
+}
+
+func (s *stubAuth) Refresh(ctx context.Context, token string) (auth.LoginResponse, error) {
+	if s.refreshFn != nil {
+		return s.refreshFn(ctx, token)
+	}
+	return auth.LoginResponse{}, nil
+}
+
+func (s *stubAuth) ValidateToken(ctx context.Context, token string) (auth.Claims, error) {
+	if s.validateFn != nil {
+		return s.validateFn(ctx, token)
+	}
+	return auth.Claims{}, nil
+}
+
+func (s *stubAuth) Profile(ctx context.Context, userID int64) (auth.UserView, error) {
+	if s.profileFn != nil {
+		return s.profileFn(ctx, userID)
+	}
+	return auth.UserView{}, nil
 }
 
 func decodeErrorBody(t *testing.T, raw []byte) map[string]map[string]string {

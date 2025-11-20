@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/yanqian/ai-helloworld/internal/domain/auth"
 	"github.com/yanqian/ai-helloworld/internal/domain/faq"
 	"github.com/yanqian/ai-helloworld/internal/domain/summarizer"
 	"github.com/yanqian/ai-helloworld/internal/domain/uvadvisor"
@@ -16,6 +17,7 @@ import (
 	"github.com/yanqian/ai-helloworld/internal/infra/faqrepo"
 	"github.com/yanqian/ai-helloworld/internal/infra/faqstore"
 	"github.com/yanqian/ai-helloworld/internal/infra/llm/chatgpt"
+	"github.com/yanqian/ai-helloworld/internal/infra/userrepo"
 	"github.com/yanqian/ai-helloworld/internal/infra/uv/datagov"
 )
 
@@ -44,6 +46,14 @@ func provideUVAdvisorConfig(cfg *config.Config) uvadvisor.Config {
 
 func provideUVClient(cfg *config.Config) *datagov.Client {
 	return datagov.NewClient(cfg.UVAdvisor.APIBaseURL)
+}
+
+func provideAuthConfig(cfg *config.Config) auth.Config {
+	return auth.Config{
+		Secret:          cfg.Auth.JWTSecret,
+		TokenTTL:        cfg.Auth.AccessTokenTTL,
+		RefreshTokenTTL: cfg.Auth.RefreshTokenTTL,
+	}
 }
 
 func provideFAQConfig(cfg *config.Config) faq.Config {
@@ -114,6 +124,41 @@ func provideFAQStore(cfg *config.Config, logger *slog.Logger) faq.Store {
 		}
 	}
 	return faqstore.NewMemoryStore()
+}
+
+func provideAuthRepository(cfg *config.Config, logger *slog.Logger) auth.Repository {
+	fallback := userrepo.NewMemoryRepository()
+	dsn := strings.TrimSpace(cfg.Auth.Postgres.DSN)
+	if dsn == "" {
+		logger.Info("auth postgres dsn not set, using memory repository")
+		return fallback
+	}
+
+	poolConfig, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		logger.Error("invalid auth postgres dsn, using memory repository", "error", err)
+		return fallback
+	}
+	if cfg.Auth.Postgres.MaxConns > 0 {
+		poolConfig.MaxConns = cfg.Auth.Postgres.MaxConns
+	}
+	if cfg.Auth.Postgres.MinConns > 0 {
+		poolConfig.MinConns = cfg.Auth.Postgres.MinConns
+	}
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
+	if err != nil {
+		logger.Error("failed to initialize auth postgres pool, using memory repository", "error", err)
+		return fallback
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := pool.Ping(ctx); err != nil {
+		logger.Error("auth postgres ping failed, using memory repository", "error", err)
+		pool.Close()
+		return fallback
+	}
+	logger.Info("auth postgres repository enabled")
+	return userrepo.NewPostgresRepository(pool)
 }
 
 func buildValkeyOptions(cfg *config.Config) (valkey.ClientOption, error) {

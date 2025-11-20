@@ -18,15 +18,17 @@ type Config struct {
 	LLM       LLMConfig       `yaml:"llm"`
 	UVAdvisor UVAdvisorConfig `yaml:"uvAdvisor"`
 	FAQ       FAQConfig       `yaml:"faq"`
+	Auth      AuthConfig      `yaml:"auth"`
 }
 
 // HTTPConfig controls server level behavior.
 type HTTPConfig struct {
-	Address      string          `yaml:"address"`
-	ReadTimeout  time.Duration   `yaml:"readTimeout"`
-	WriteTimeout time.Duration   `yaml:"writeTimeout"`
-	RateLimit    RateLimitConfig `yaml:"rateLimit"`
-	Retry        RetryConfig     `yaml:"retry"`
+	Address        string          `yaml:"address"`
+	ReadTimeout    time.Duration   `yaml:"readTimeout"`
+	WriteTimeout   time.Duration   `yaml:"writeTimeout"`
+	AllowedOrigins []string        `yaml:"allowedOrigins"`
+	RateLimit      RateLimitConfig `yaml:"rateLimit"`
+	Retry          RetryConfig     `yaml:"retry"`
 }
 
 // RateLimitConfig drives the request limiting middleware.
@@ -74,6 +76,14 @@ type FAQConfig struct {
 	SimilarityThreshold float64        `yaml:"similarityThreshold"`
 	Redis               RedisConfig    `yaml:"redis"`
 	Postgres            PostgresConfig `yaml:"postgres"`
+}
+
+// AuthConfig controls authentication settings.
+type AuthConfig struct {
+	JWTSecret       string         `yaml:"jwtSecret"`
+	AccessTokenTTL  time.Duration  `yaml:"accessTokenTtl"`
+	RefreshTokenTTL time.Duration  `yaml:"refreshTokenTtl"`
+	Postgres        PostgresConfig `yaml:"postgres"`
 }
 
 // RedisConfig contains connection information for cache storage.
@@ -126,6 +136,9 @@ func hydrateFromFile(cfg *Config, path string) error {
 func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("HTTP_ADDRESS"); v != "" {
 		cfg.HTTP.Address = v
+	}
+	if v := os.Getenv("HTTP_ALLOWED_ORIGINS"); v != "" {
+		cfg.HTTP.AllowedOrigins = splitAndTrim(v)
 	}
 	if v := os.Getenv("SUMMARY_MAX_LEN"); v != "" {
 		if parsed, err := strconv.Atoi(v); err == nil {
@@ -200,6 +213,35 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.FAQ.Postgres.MinConns = int32(parsed)
 		}
 	}
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		cfg.Auth.JWTSecret = v
+	}
+	if v := os.Getenv("AUTH_JWT_SECRET"); v != "" {
+		cfg.Auth.JWTSecret = v
+	}
+	if v := os.Getenv("AUTH_ACCESS_TOKEN_TTL"); v != "" {
+		if parsed, err := time.ParseDuration(v); err == nil {
+			cfg.Auth.AccessTokenTTL = parsed
+		}
+	}
+	if v := os.Getenv("AUTH_REFRESH_TOKEN_TTL"); v != "" {
+		if parsed, err := time.ParseDuration(v); err == nil {
+			cfg.Auth.RefreshTokenTTL = parsed
+		}
+	}
+	if v := os.Getenv("AUTH_POSTGRES_DSN"); v != "" {
+		cfg.Auth.Postgres.DSN = v
+	}
+	if v := os.Getenv("AUTH_POSTGRES_MAX_CONNS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.Auth.Postgres.MaxConns = int32(parsed)
+		}
+	}
+	if v := os.Getenv("AUTH_POSTGRES_MIN_CONNS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.Auth.Postgres.MinConns = int32(parsed)
+		}
+	}
 	if v := os.Getenv("HTTP_RATE_LIMIT_ENABLED"); v != "" {
 		cfg.HTTP.RateLimit.Enabled = v == "1" || strings.EqualFold(v, "true")
 	}
@@ -234,6 +276,9 @@ func defaultConfig() *Config {
 			Address:      ":8080",
 			ReadTimeout:  5 * time.Second,
 			WriteTimeout: 5 * time.Second,
+			AllowedOrigins: []string{
+				"*",
+			},
 			RateLimit: RateLimitConfig{
 				Enabled:           true,
 				RequestsPerMinute: 60,
@@ -245,6 +290,9 @@ func defaultConfig() *Config {
 				BaseBackoff: 150 * time.Millisecond,
 				Exclude: []string{
 					"/api/v1/summaries/stream",
+					"/api/v1/auth/login",
+					"/api/v1/auth/register",
+					"/api/v1/auth/refresh",
 				},
 			},
 		},
@@ -275,6 +323,15 @@ func defaultConfig() *Config {
 				DSN:      "",
 				MaxConns: 10,
 				MinConns: 2,
+			},
+		},
+		Auth: AuthConfig{
+			AccessTokenTTL:  time.Hour,
+			RefreshTokenTTL: 24 * time.Hour,
+			Postgres: PostgresConfig{
+				DSN:      "",
+				MaxConns: 5,
+				MinConns: 1,
 			},
 		},
 	}
@@ -334,5 +391,26 @@ func (c *Config) Validate() error {
 			return errors.New("http.retry.baseBackoff must be positive")
 		}
 	}
+	if c.Auth.JWTSecret == "" {
+		return errors.New("auth.jwtSecret cannot be empty")
+	}
+	if c.Auth.AccessTokenTTL <= 0 {
+		return errors.New("auth.accessTokenTtl must be positive")
+	}
+	if c.Auth.RefreshTokenTTL <= 0 {
+		return errors.New("auth.refreshTokenTtl must be positive")
+	}
 	return nil
+}
+
+func splitAndTrim(raw string) []string {
+	parts := strings.Split(raw, ",")
+	var result []string
+	for _, part := range parts {
+		val := strings.TrimSpace(part)
+		if val != "" {
+			result = append(result, val)
+		}
+	}
+	return result
 }
