@@ -19,19 +19,19 @@ type Service interface {
 	StreamSummary(ctx context.Context, req Request) (<-chan StreamChunk, error)
 }
 
-type chatClient interface {
+type ChatClient interface {
 	CreateChatCompletion(ctx context.Context, req chatgpt.ChatCompletionRequest) (chatgpt.ChatCompletionResponse, error)
 	CreateChatCompletionStream(ctx context.Context, req chatgpt.ChatCompletionRequest) (chatgpt.Stream, error)
 }
 
 type service struct {
 	cfg    Config
-	client chatClient
+	client ChatClient
 	logger *slog.Logger
 }
 
 // NewService is a wire provider for the summarizer domain.
-func NewService(cfg Config, client chatClient, logger *slog.Logger) Service {
+func NewService(cfg Config, client ChatClient, logger *slog.Logger) Service {
 	return &service{cfg: cfg, client: client, logger: logger.With("component", "summarizer.service")}
 }
 

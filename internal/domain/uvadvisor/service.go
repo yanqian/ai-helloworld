@@ -19,25 +19,25 @@ type Service interface {
 	Recommend(ctx context.Context, req Request) (Response, error)
 }
 
-type chatClient interface {
+type ChatClient interface {
 	CreateChatCompletion(ctx context.Context, req chatgpt.ChatCompletionRequest) (chatgpt.ChatCompletionResponse, error)
 }
 
-type uvClient interface {
+type UVClient interface {
 	Fetch(ctx context.Context, date string) (UVSeries, error)
 }
 
 type service struct {
 	cfg      Config
-	client   chatClient
-	uvClient uvClient
+	client   ChatClient
+	uvClient UVClient
 	logger   *slog.Logger
 	timezone *time.Location
 	now      func() time.Time
 }
 
 // NewService wires up the UV advisor domain.
-func NewService(cfg Config, uvClient uvClient, client chatClient, logger *slog.Logger) Service {
+func NewService(cfg Config, uvClient UVClient, client ChatClient, logger *slog.Logger) Service {
 	return &service{
 		cfg:      cfg,
 		client:   client,

@@ -18,7 +18,7 @@ type Service interface {
 	Trending(ctx context.Context) ([]TrendingQuery, error)
 }
 
-type chatClient interface {
+type ChatClient interface {
 	CreateChatCompletion(ctx context.Context, req chatgpt.ChatCompletionRequest) (chatgpt.ChatCompletionResponse, error)
 	CreateEmbedding(ctx context.Context, req chatgpt.EmbeddingRequest) (chatgpt.EmbeddingResponse, error)
 }
@@ -27,13 +27,13 @@ type service struct {
 	cfg    Config
 	repo   QuestionRepository
 	store  Store
-	client chatClient
+	client ChatClient
 	logger *slog.Logger
 	hasher *semanticHasher
 }
 
 // NewService wires up the FAQ domain.
-func NewService(cfg Config, repo QuestionRepository, store Store, client chatClient, logger *slog.Logger) Service {
+func NewService(cfg Config, repo QuestionRepository, store Store, client ChatClient, logger *slog.Logger) Service {
 	return &service{
 		cfg:    cfg,
 		repo:   repo,
