@@ -73,6 +73,9 @@ func (s *service) Register(ctx context.Context, req RegisterRequest) (UserView, 
 	}
 	user, err := s.repo.Create(ctx, email, nickname, string(hashed))
 	if err != nil {
+		if errors.Is(err, ErrEmailExists) {
+			return UserView{}, apperrors.Wrap("email_exists", "email already registered", err)
+		}
 		return UserView{}, apperrors.Wrap("auth_error", "failed to create user", err)
 	}
 	return toView(user), nil

@@ -2,8 +2,10 @@ package userrepo
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/yanqian/ai-helloworld/internal/domain/auth"
@@ -26,7 +28,14 @@ func (r *PostgresRepository) Create(ctx context.Context, email, nickname, passwo
 		VALUES ($1, $2, $3)
 		RETURNING id, email, nickname, password_hash, created_at
 	`, email, nickname, passwordHash)
-	return scanUser(row)
+	user, err := scanUser(row)
+	if err != nil {
+		if isDuplicateError(err) {
+			return auth.User{}, auth.ErrEmailExists
+		}
+		return auth.User{}, err
+	}
+	return user, nil
 }
 
 // GetByEmail fetches a user by email.
@@ -88,3 +97,11 @@ func scanUser(row rowScanner) (auth.User, error) {
 }
 
 var _ auth.Repository = (*PostgresRepository)(nil)
+
+func isDuplicateError(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	return false
+}
