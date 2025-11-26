@@ -12,6 +12,7 @@ import (
 
 	"github.com/yanqian/ai-helloworld/internal/infra/llm/chatgpt"
 	apperrors "github.com/yanqian/ai-helloworld/pkg/errors"
+	"github.com/yanqian/ai-helloworld/pkg/metrics"
 )
 
 // Service exposes UV based recommendation capabilities.
@@ -49,6 +50,7 @@ func NewService(cfg Config, uvClient UVClient, client ChatClient, logger *slog.L
 }
 
 func (s *service) Recommend(ctx context.Context, req Request) (Response, error) {
+	started := time.Now()
 	date, err := s.resolveDate(req.Date)
 	if err != nil {
 		return Response{}, apperrors.Wrap("invalid_input", "date must be formatted as YYYY-MM-DD", err)
@@ -108,6 +110,8 @@ func (s *service) Recommend(ctx context.Context, req Request) (Response, error) 
 		Tips:          normalizeList(advice.Tips),
 		Readings:      readings,
 		DataTimestamp: dataTimestamp,
+		DurationMs:    time.Since(started).Milliseconds(),
+		TokenUsage:    mapUsage(completion.Usage),
 	}
 	return res, nil
 }
@@ -173,6 +177,17 @@ func toResponseReadings(points []UVSample) []Reading {
 		})
 	}
 	return readings
+}
+
+func mapUsage(usage chatgpt.TokenUsage) *metrics.TokenUsage {
+	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && usage.TotalTokens == 0 {
+		return nil
+	}
+	return &metrics.TokenUsage{
+		PromptTokens:     usage.PromptTokens,
+		CompletionTokens: usage.CompletionTokens,
+		TotalTokens:      usage.TotalTokens,
+	}
 }
 
 type aiAdvice struct {

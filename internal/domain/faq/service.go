@@ -10,6 +10,7 @@ import (
 
 	"github.com/yanqian/ai-helloworld/internal/infra/llm/chatgpt"
 	apperrors "github.com/yanqian/ai-helloworld/pkg/errors"
+	"github.com/yanqian/ai-helloworld/pkg/metrics"
 )
 
 // Service exposes smart FAQ capabilities.
@@ -53,6 +54,8 @@ func (s *service) Answer(ctx context.Context, req Request) (Response, error) {
 	mode := sanitizeMode(req.Mode)
 	normalized := normalizeQuestion(question)
 	plan := resolveSearchPlan(mode)
+	started := time.Now()
+	usage := metrics.TokenUsage{}
 
 	var (
 		embedding       []float32
@@ -79,11 +82,15 @@ func (s *service) Answer(ctx context.Context, req Request) (Response, error) {
 				actualMode = SearchModeExact
 			}
 		case SearchModeSemanticHash:
-			var err error
-			embedding, err = s.ensureEmbedding(ctx, embedding, question)
+			var (
+				err      error
+				embUsage metrics.TokenUsage
+			)
+			embedding, embUsage, err = s.ensureEmbedding(ctx, embedding, question)
 			if err != nil {
 				return Response{}, apperrors.Wrap("faq_error", "embedding failed", err)
 			}
+			usage = addUsage(usage, embUsage)
 			if !hasSemanticHash {
 				semanticHash, hasSemanticHash, err = s.computeSemanticHash(embedding)
 				if err != nil {
@@ -103,11 +110,15 @@ func (s *service) Answer(ctx context.Context, req Request) (Response, error) {
 				actualMode = SearchModeSemanticHash
 			}
 		case SearchModeSimilarity:
-			var err error
-			embedding, err = s.ensureEmbedding(ctx, embedding, question)
+			var (
+				err      error
+				embUsage metrics.TokenUsage
+			)
+			embedding, embUsage, err = s.ensureEmbedding(ctx, embedding, question)
 			if err != nil {
 				return Response{}, apperrors.Wrap("faq_error", "embedding failed", err)
 			}
+			usage = addUsage(usage, embUsage)
 			match, found, err := s.repo.FindNearest(ctx, embedding)
 			if err != nil {
 				return Response{}, apperrors.Wrap("faq_error", "similarity lookup failed", err)
@@ -141,18 +152,26 @@ func (s *service) Answer(ctx context.Context, req Request) (Response, error) {
 			answer = cached.Answer
 		} else {
 			source = "llm"
-			var genErr error
-			answer, genErr = s.generateAndCacheAnswer(ctx, questionID, matchedQuestion)
+			var (
+				genErr    error
+				answerUse metrics.TokenUsage
+			)
+			answer, answerUse, genErr = s.generateAndCacheAnswer(ctx, questionID, matchedQuestion)
 			if genErr != nil {
 				return Response{}, genErr
 			}
+			usage = addUsage(usage, answerUse)
 		}
 	} else {
-		var err error
-		embedding, err = s.ensureEmbedding(ctx, embedding, question)
+		var (
+			err      error
+			embUsage metrics.TokenUsage
+		)
+		embedding, embUsage, err = s.ensureEmbedding(ctx, embedding, question)
 		if err != nil {
 			return Response{}, apperrors.Wrap("faq_error", "embedding failed", err)
 		}
+		usage = addUsage(usage, embUsage)
 		if !hasSemanticHash {
 			semanticHash, hasSemanticHash, err = s.computeSemanticHash(embedding)
 			if err != nil {
@@ -172,10 +191,12 @@ func (s *service) Answer(ctx context.Context, req Request) (Response, error) {
 		questionID = rec.ID
 		matchedQuestion = question
 		source = "llm"
-		answer, err = s.generateAndCacheAnswer(ctx, questionID, question)
+		var answerUse metrics.TokenUsage
+		answer, answerUse, err = s.generateAndCacheAnswer(ctx, questionID, question)
 		if err != nil {
 			return Response{}, err
 		}
+		usage = addUsage(usage, answerUse)
 	}
 
 	if err := s.store.IncrementQuery(ctx, normalized, question); err != nil {
@@ -195,6 +216,8 @@ func (s *service) Answer(ctx context.Context, req Request) (Response, error) {
 		MatchedQuestion: matchedQuestion,
 		Mode:            actualMode,
 		Recommendations: recs,
+		DurationMs:      time.Since(started).Milliseconds(),
+		TokenUsage:      collapseUsage(usage),
 	}, nil
 }
 
@@ -206,10 +229,10 @@ func (s *service) Trending(ctx context.Context) ([]TrendingQuery, error) {
 	return recs, nil
 }
 
-func (s *service) generateAndCacheAnswer(ctx context.Context, questionID int64, question string) (string, error) {
-	answer, err := s.askLLM(ctx, question)
+func (s *service) generateAndCacheAnswer(ctx context.Context, questionID int64, question string) (string, metrics.TokenUsage, error) {
+	answer, usage, err := s.askLLM(ctx, question)
 	if err != nil {
-		return "", err
+		return "", metrics.TokenUsage{}, err
 	}
 	record := AnswerRecord{
 		QuestionID: questionID,
@@ -220,44 +243,44 @@ func (s *service) generateAndCacheAnswer(ctx context.Context, questionID int64, 
 	if err := s.store.SaveAnswer(ctx, record, s.cfg.CacheTTL); err != nil {
 		s.logger.Warn("faq cache save failed", "error", err)
 	}
-	return answer, nil
+	return answer, usage, nil
 }
 
-func (s *service) ensureEmbedding(ctx context.Context, current []float32, question string) ([]float32, error) {
+func (s *service) ensureEmbedding(ctx context.Context, current []float32, question string) ([]float32, metrics.TokenUsage, error) {
 	if len(current) > 0 {
-		return current, nil
+		return current, metrics.TokenUsage{}, nil
 	}
-	embedding, err := s.embedQuestion(ctx, question)
+	embedding, usage, err := s.embedQuestion(ctx, question)
 	if err != nil {
-		return nil, err
+		return nil, metrics.TokenUsage{}, err
 	}
 	if len(embedding) == 0 {
-		return nil, errors.New("embedding response empty")
+		return nil, metrics.TokenUsage{}, errors.New("embedding response empty")
 	}
-	return embedding, nil
+	return embedding, usage, nil
 }
 
-func (s *service) embedQuestion(ctx context.Context, text string) ([]float32, error) {
+func (s *service) embedQuestion(ctx context.Context, text string) ([]float32, metrics.TokenUsage, error) {
 	input := strings.TrimSpace(text)
 	if input == "" {
-		return nil, nil
+		return nil, metrics.TokenUsage{}, nil
 	}
 	resp, err := s.client.CreateEmbedding(ctx, chatgpt.EmbeddingRequest{
 		Model: s.cfg.EmbeddingModel,
 		Input: input,
 	})
 	if err != nil {
-		return nil, err
+		return nil, metrics.TokenUsage{}, err
 	}
 	if len(resp.Data) == 0 || len(resp.Data[0].Embedding) == 0 {
-		return nil, errors.New("embedding response empty")
+		return nil, metrics.TokenUsage{}, errors.New("embedding response empty")
 	}
 	vector := make([]float32, len(resp.Data[0].Embedding))
 	copy(vector, resp.Data[0].Embedding)
-	return vector, nil
+	return vector, mapUsage(resp.Usage), nil
 }
 
-func (s *service) askLLM(ctx context.Context, question string) (string, error) {
+func (s *service) askLLM(ctx context.Context, question string) (string, metrics.TokenUsage, error) {
 	prompt := strings.TrimSpace(s.cfg.Prompt)
 	if prompt == "" {
 		prompt = "You are a helpful knowledge base assistant."
@@ -272,16 +295,16 @@ func (s *service) askLLM(ctx context.Context, question string) (string, error) {
 		Temperature: s.cfg.Temperature,
 	})
 	if err != nil {
-		return "", apperrors.Wrap("llm_error", "chatgpt request failed", err)
+		return "", metrics.TokenUsage{}, apperrors.Wrap("llm_error", "chatgpt request failed", err)
 	}
 	if len(resp.Choices) == 0 {
-		return "", apperrors.Wrap("llm_error", "chatgpt returned no choices", errors.New("empty choices"))
+		return "", metrics.TokenUsage{}, apperrors.Wrap("llm_error", "chatgpt returned no choices", errors.New("empty choices"))
 	}
 	answer := strings.TrimSpace(resp.Choices[0].Message.Content)
 	if answer == "" {
-		return "", apperrors.Wrap("llm_error", "chatgpt response empty", nil)
+		return "", metrics.TokenUsage{}, apperrors.Wrap("llm_error", "chatgpt response empty", nil)
 	}
-	return answer, nil
+	return answer, mapUsage(resp.Usage), nil
 }
 
 func (s *service) computeSemanticHash(embedding []float32) (uint64, bool, error) {
@@ -289,6 +312,29 @@ func (s *service) computeSemanticHash(embedding []float32) (uint64, bool, error)
 		return 0, false, nil
 	}
 	return s.hasher.Hash(embedding)
+}
+
+func addUsage(current metrics.TokenUsage, next metrics.TokenUsage) metrics.TokenUsage {
+	return metrics.TokenUsage{
+		PromptTokens:     current.PromptTokens + next.PromptTokens,
+		CompletionTokens: current.CompletionTokens + next.CompletionTokens,
+		TotalTokens:      current.TotalTokens + next.TotalTokens,
+	}
+}
+
+func mapUsage(usage chatgpt.TokenUsage) metrics.TokenUsage {
+	return metrics.TokenUsage{
+		PromptTokens:     usage.PromptTokens,
+		CompletionTokens: usage.CompletionTokens,
+		TotalTokens:      usage.TotalTokens,
+	}
+}
+
+func collapseUsage(usage metrics.TokenUsage) *metrics.TokenUsage {
+	if usage.IsZero() {
+		return nil
+	}
+	return &usage
 }
 
 func resolveSearchPlan(mode SearchMode) []SearchMode {

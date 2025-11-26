@@ -1,5 +1,7 @@
 package summarizer
 
+import "github.com/yanqian/ai-helloworld/pkg/metrics"
+
 // Config configures the summarizer heuristics.
 type Config struct {
 	MaxSummaryLen int
@@ -17,8 +19,10 @@ type Request struct {
 
 // Response is returned by the sync endpoint.
 type Response struct {
-	Summary  string   `json:"summary"`
-	Keywords []string `json:"keywords"`
+	Summary    string              `json:"summary"`
+	Keywords   []string            `json:"keywords"`
+	DurationMs int64               `json:"durationMs,omitempty"`
+	TokenUsage *metrics.TokenUsage `json:"tokenUsage,omitempty"`
 }
 
 // StreamChunk represents a streaming update.

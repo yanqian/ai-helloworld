@@ -7,10 +7,12 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/yanqian/ai-helloworld/internal/infra/llm/chatgpt"
 	apperrors "github.com/yanqian/ai-helloworld/pkg/errors"
+	"github.com/yanqian/ai-helloworld/pkg/metrics"
 )
 
 // Service exposes summarization capabilities.
@@ -40,6 +42,7 @@ func (s *service) Summarize(ctx context.Context, req Request) (Response, error) 
 	if text == "" {
 		return Response{}, apperrors.Wrap("invalid_input", "text cannot be empty", nil)
 	}
+	started := time.Now()
 
 	messages := s.buildMessages(req, text)
 	resp, err := s.client.CreateChatCompletion(ctx, chatgpt.ChatCompletionRequest{
@@ -64,8 +67,10 @@ func (s *service) Summarize(ctx context.Context, req Request) (Response, error) 
 	summary = truncate(summary, s.cfg.MaxSummaryLen)
 
 	return Response{
-		Summary:  summary,
-		Keywords: keywords,
+		Summary:    summary,
+		Keywords:   keywords,
+		DurationMs: time.Since(started).Milliseconds(),
+		TokenUsage: mapUsage(resp.Usage),
 	}, nil
 }
 
@@ -194,6 +199,17 @@ func splitKeywords(raw string, limit int) []string {
 		}
 	}
 	return keywords
+}
+
+func mapUsage(usage chatgpt.TokenUsage) *metrics.TokenUsage {
+	if usage.PromptTokens == 0 && usage.CompletionTokens == 0 && usage.TotalTokens == 0 {
+		return nil
+	}
+	return &metrics.TokenUsage{
+		PromptTokens:     usage.PromptTokens,
+		CompletionTokens: usage.CompletionTokens,
+		TotalTokens:      usage.TotalTokens,
+	}
 }
 
 func extractSummary(content string) string {

@@ -37,6 +37,7 @@ type ChatCompletionResponse struct {
 	Choices []struct {
 		Message Message `json:"message"`
 	} `json:"choices"`
+	Usage TokenUsage `json:"usage"`
 }
 
 // EmbeddingRequest represents an embedding call payload.
@@ -50,6 +51,7 @@ type EmbeddingResponse struct {
 	Data []struct {
 		Embedding []float32 `json:"embedding"`
 	} `json:"data"`
+	Usage TokenUsage `json:"usage"`
 }
 
 // Tool represents a callable function exposed to ChatGPT.
@@ -84,6 +86,13 @@ type ChatCompletionStreamChunk struct {
 		Delta        Message `json:"delta"`
 		FinishReason string  `json:"finish_reason"`
 	} `json:"choices"`
+}
+
+// TokenUsage captures prompt/completion token counts returned by the API.
+type TokenUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens,omitempty"`
+	TotalTokens      int `json:"total_tokens"`
 }
 
 // Client performs HTTP requests to the ChatGPT API.

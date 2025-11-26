@@ -1,6 +1,10 @@
 package uvadvisor
 
-import "time"
+import (
+	"time"
+
+	"github.com/yanqian/ai-helloworld/pkg/metrics"
+)
 
 // Request captures the payload accepted by the UV advisor service.
 type Request struct {
@@ -9,17 +13,19 @@ type Request struct {
 
 // Response is serialized back to API consumers.
 type Response struct {
-	Date          string    `json:"date"`
-	Category      string    `json:"category"`
-	MaxUV         float64   `json:"maxUv"`
-	PeakHour      string    `json:"peakHour"`
-	Source        string    `json:"source"`
-	Summary       string    `json:"summary"`
-	Clothing      []string  `json:"clothing"`
-	Protection    []string  `json:"protection"`
-	Tips          []string  `json:"tips"`
-	Readings      []Reading `json:"readings"`
-	DataTimestamp string    `json:"dataTimestamp"`
+	Date          string              `json:"date"`
+	Category      string              `json:"category"`
+	MaxUV         float64             `json:"maxUv"`
+	PeakHour      string              `json:"peakHour"`
+	Source        string              `json:"source"`
+	Summary       string              `json:"summary"`
+	Clothing      []string            `json:"clothing"`
+	Protection    []string            `json:"protection"`
+	Tips          []string            `json:"tips"`
+	Readings      []Reading           `json:"readings"`
+	DataTimestamp string              `json:"dataTimestamp"`
+	DurationMs    int64               `json:"durationMs,omitempty"`
+	TokenUsage    *metrics.TokenUsage `json:"tokenUsage,omitempty"`
 }
 
 // Reading models a normalized UV point used by the frontend.

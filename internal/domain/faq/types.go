@@ -1,6 +1,10 @@
 package faq
 
-import "time"
+import (
+	"time"
+
+	"github.com/yanqian/ai-helloworld/pkg/metrics"
+)
 
 // SearchMode identifies the lookup strategy.
 type SearchMode string
@@ -24,12 +28,14 @@ type Request struct {
 
 // Response is returned to the HTTP transport.
 type Response struct {
-	Question        string          `json:"question"`
-	Answer          string          `json:"answer"`
-	Source          string          `json:"source"`
-	MatchedQuestion string          `json:"matchedQuestion"`
-	Mode            SearchMode      `json:"mode"`
-	Recommendations []TrendingQuery `json:"recommendations"`
+	Question        string              `json:"question"`
+	Answer          string              `json:"answer"`
+	Source          string              `json:"source"`
+	MatchedQuestion string              `json:"matchedQuestion"`
+	Mode            SearchMode          `json:"mode"`
+	Recommendations []TrendingQuery     `json:"recommendations"`
+	DurationMs      int64               `json:"durationMs,omitempty"`
+	TokenUsage      *metrics.TokenUsage `json:"tokenUsage,omitempty"`
 }
 
 // TrendingQuery represents a frequently asked question.
