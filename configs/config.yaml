@@ -30,7 +30,7 @@ faq:
   topRecommendations: 10
   similarityThreshold: 0.7
   redis:
-    enabled: false
+    enabled: true
     addr: "" # set in the environment variable FAQ_REDIS_ADDR in production
   postgres:
     dsn: "" # set in the environment variable FAQ_POSTGRES_DSN in production
@@ -50,3 +50,22 @@ auth:
     dsn: "" # set via AUTH_POSTGRES_DSN in production
     maxConns: 5
     minConns: 1
+uploadAsk:
+  vectorDim: 1536
+  maxFileMb: 20
+  maxPreviewChars: 240
+  storage:
+    endpoint: "https://ba25d2c1325108cb0a84ce55b2b8d10e.r2.cloudflarestorage.com" # set via R2_ENDPOINT or UPLOADASK_STORAGE_ENDPOINT
+    accessKey: "" # set via R2_ACCESS_KEY
+    secretKey: "" # set via R2_SECRET_KEY
+    bucket: "upload-ask-prod" # set via R2 bucket name
+    region: "" # optional
+  redis:
+    enabled: true
+    addr: "" # set via UPLOADASK_REDIS_ADDR
+  postgres:
+    dsn: "" # set via UPLOADASK_POSTGRES_DSN in production
+    maxConns: 5
+    minConns: 1
+  worker:
+    enabled: true

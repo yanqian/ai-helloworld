@@ -10,6 +10,7 @@ import (
 	"github.com/yanqian/ai-helloworld/internal/domain/auth"
 	"github.com/yanqian/ai-helloworld/internal/domain/faq"
 	"github.com/yanqian/ai-helloworld/internal/domain/summarizer"
+	uploadask "github.com/yanqian/ai-helloworld/internal/domain/uploadask"
 	"github.com/yanqian/ai-helloworld/internal/domain/uvadvisor"
 	apperrors "github.com/yanqian/ai-helloworld/pkg/errors"
 )
@@ -20,16 +21,18 @@ type Handler struct {
 	advisorSvc    uvadvisor.Service
 	faqSvc        faq.Service
 	authSvc       auth.Service
+	uploadSvc     *uploadask.Service
 	logger        *slog.Logger
 }
 
 // NewHandler constructs the root HTTP handler.
-func NewHandler(summarySvc summarizer.Service, advisorSvc uvadvisor.Service, faqSvc faq.Service, authSvc auth.Service, logger *slog.Logger) *Handler {
+func NewHandler(summarySvc summarizer.Service, advisorSvc uvadvisor.Service, faqSvc faq.Service, authSvc auth.Service, uploadSvc *uploadask.Service, logger *slog.Logger) *Handler {
 	return &Handler{
 		summarizerSvc: summarySvc,
 		advisorSvc:    advisorSvc,
 		faqSvc:        faqSvc,
 		authSvc:       authSvc,
+		uploadSvc:     uploadSvc,
 		logger:        logger.With("component", "http.handler"),
 	}
 }

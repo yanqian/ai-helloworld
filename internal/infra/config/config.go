@@ -19,6 +19,7 @@ type Config struct {
 	UVAdvisor UVAdvisorConfig `yaml:"uvAdvisor"`
 	FAQ       FAQConfig       `yaml:"faq"`
 	Auth      AuthConfig      `yaml:"auth"`
+	UploadAsk UploadAskConfig `yaml:"uploadAsk"`
 }
 
 // HTTPConfig controls server level behavior.
@@ -54,6 +55,7 @@ type SummaryConfig struct {
 }
 
 // LLMConfig contains ChatGPT/OpenAI settings.
+// TODO : support other LLM providers and for different features, use different LLMs.
 type LLMConfig struct {
 	APIKey         string  `yaml:"apiKey"`
 	BaseURL        string  `yaml:"baseUrl"`
@@ -76,6 +78,31 @@ type FAQConfig struct {
 	SimilarityThreshold float64        `yaml:"similarityThreshold"`
 	Redis               RedisConfig    `yaml:"redis"`
 	Postgres            PostgresConfig `yaml:"postgres"`
+}
+
+// UploadAskConfig controls the upload-and-ask flow.
+type UploadAskConfig struct {
+	VectorDim       int                 `yaml:"vectorDim"`
+	MaxFileMB       int                 `yaml:"maxFileMb"`
+	MaxPreviewChars int                 `yaml:"maxPreviewChars"`
+	Storage         UploadStorageConfig `yaml:"storage"`
+	Redis           RedisConfig         `yaml:"redis"`
+	Postgres        PostgresConfig      `yaml:"postgres"`
+	Worker          UploadWorkerConfig  `yaml:"worker"`
+}
+
+// UploadStorageConfig configures object storage for uploads.
+type UploadStorageConfig struct {
+	Endpoint  string `yaml:"endpoint"`
+	AccessKey string `yaml:"accessKey"`
+	SecretKey string `yaml:"secretKey"`
+	Bucket    string `yaml:"bucket"`
+	Region    string `yaml:"region"`
+}
+
+// UploadWorkerConfig toggles background processing.
+type UploadWorkerConfig struct {
+	Enabled bool `yaml:"enabled"`
 }
 
 // AuthConfig controls authentication settings.
@@ -213,6 +240,58 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.FAQ.Postgres.MinConns = int32(parsed)
 		}
 	}
+	if v := os.Getenv("UPLOADASK_VECTOR_DIM"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.UploadAsk.VectorDim = parsed
+		}
+	}
+	if v := os.Getenv("UPLOADASK_MAX_FILE_MB"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.UploadAsk.MaxFileMB = parsed
+		}
+	}
+	if v := os.Getenv("UPLOADASK_MAX_PREVIEW_CHARS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.UploadAsk.MaxPreviewChars = parsed
+		}
+	}
+	if v := os.Getenv("UPLOADASK_STORAGE_ENDPOINT"); v != "" {
+		cfg.UploadAsk.Storage.Endpoint = v
+	}
+	if v := os.Getenv("UPLOADASK_STORAGE_ACCESS_KEY"); v != "" {
+		cfg.UploadAsk.Storage.AccessKey = v
+	}
+	if v := os.Getenv("UPLOADASK_STORAGE_SECRET_KEY"); v != "" {
+		cfg.UploadAsk.Storage.SecretKey = v
+	}
+	if v := os.Getenv("UPLOADASK_STORAGE_BUCKET"); v != "" {
+		cfg.UploadAsk.Storage.Bucket = v
+	}
+	if v := os.Getenv("UPLOADASK_STORAGE_REGION"); v != "" {
+		cfg.UploadAsk.Storage.Region = v
+	}
+	if v := os.Getenv("UPLOADASK_POSTGRES_DSN"); v != "" {
+		cfg.UploadAsk.Postgres.DSN = v
+	}
+	if v := os.Getenv("UPLOADASK_POSTGRES_MAX_CONNS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.UploadAsk.Postgres.MaxConns = int32(parsed)
+		}
+	}
+	if v := os.Getenv("UPLOADASK_POSTGRES_MIN_CONNS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.UploadAsk.Postgres.MinConns = int32(parsed)
+		}
+	}
+	if v := os.Getenv("UPLOADASK_WORKER_ENABLED"); v != "" {
+		cfg.UploadAsk.Worker.Enabled = v == "1" || strings.EqualFold(v, "true")
+	}
+	if v := os.Getenv("UPLOADASK_REDIS_ENABLED"); v != "" {
+		cfg.UploadAsk.Redis.Enabled = v == "1" || strings.EqualFold(v, "true")
+	}
+	if v := os.Getenv("UPLOADASK_REDIS_ADDR"); v != "" {
+		cfg.UploadAsk.Redis.Addr = v
+	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.Auth.JWTSecret = v
 	}
@@ -334,6 +413,24 @@ func defaultConfig() *Config {
 				MinConns: 1,
 			},
 		},
+		UploadAsk: UploadAskConfig{
+			VectorDim:       1536,
+			MaxFileMB:       20,
+			MaxPreviewChars: 240,
+			Storage:         UploadStorageConfig{},
+			Redis: RedisConfig{
+				Enabled: false,
+				Addr:    "",
+			},
+			Postgres: PostgresConfig{
+				DSN:      "",
+				MaxConns: 5,
+				MinConns: 1,
+			},
+			Worker: UploadWorkerConfig{
+				Enabled: true,
+			},
+		},
 	}
 }
 
@@ -399,6 +496,18 @@ func (c *Config) Validate() error {
 	}
 	if c.Auth.RefreshTokenTTL <= 0 {
 		return errors.New("auth.refreshTokenTtl must be positive")
+	}
+	if c.UploadAsk.VectorDim <= 0 {
+		return errors.New("uploadAsk.vectorDim must be positive")
+	}
+	if c.UploadAsk.MaxFileMB <= 0 {
+		return errors.New("uploadAsk.maxFileMb must be positive")
+	}
+	if c.UploadAsk.MaxPreviewChars < 0 {
+		return errors.New("uploadAsk.maxPreviewChars cannot be negative")
+	}
+	if c.UploadAsk.Redis.Enabled && strings.TrimSpace(c.UploadAsk.Redis.Addr) == "" {
+		return errors.New("uploadAsk.redis.addr cannot be empty when uploadAsk.redis is enabled")
 	}
 	return nil
 }

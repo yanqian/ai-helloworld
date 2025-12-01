@@ -41,6 +41,15 @@ func NewRouter(cfg *config.Config, handler *Handler) *http.Server {
 			protected.POST("/faq/search", handler.SmartFAQ)
 			protected.GET("/faq/trending", handler.TrendingFAQ)
 			protected.GET("/auth/me", handler.Profile)
+			uploadAsk := protected.Group("/upload-ask")
+			{
+				uploadAsk.POST("/documents", handler.UploadDocument)
+				uploadAsk.GET("/documents", handler.ListDocuments)
+				uploadAsk.GET("/documents/:id", handler.GetDocument)
+				uploadAsk.POST("/qa/query", handler.AskQuestion)
+				uploadAsk.GET("/qa/sessions", handler.ListSessions)
+				uploadAsk.GET("/qa/sessions/:id/logs", handler.ListSessionLogs)
+			}
 		}
 	}
 

@@ -70,6 +70,10 @@ jobs:
       FAQ_REDIS_ADDR: ${{ secrets.FAQ_REDIS_ADDR }}
       FAQ_POSTGRES_DSN: ${{ secrets.FAQ_POSTGRES_DSN }}
       AUTH_POSTGRES_DSN: ${{ secrets.AUTH_POSTGRES_DSN }}
+      R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+      R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+      UPLOADASK_REDIS_ADDR: ${{ secrets.UPLOADASK_REDIS_ADDR }}
+      UPLOADASK_POSTGRES_DSN: ${{ secrets.UPLOADASK_POSTGRES_DSN }}
 
     steps:
       - name: Checkout
@@ -101,6 +105,6 @@ jobs:
             --project "$GCP_PROJECT_ID" \
             --region "$GCP_REGION" \
             --platform managed \
-            --set-env-vars "LLM_API_KEY=${{ secrets.LLM_API_KEY }},FAQ_REDIS_ENABLED=${FAQ_REDIS_ENABLED},FAQ_REDIS_ADDR=${FAQ_REDIS_ADDR},FAQ_POSTGRES_DSN=${FAQ_POSTGRES_DSN},AUTH_POSTGRES_DSN=${AUTH_POSTGRES_DSN},JWT_SECRET=${{ secrets.JWT_SECRET }}" \
+            --set-env-vars "LLM_API_KEY=${{ secrets.LLM_API_KEY }},FAQ_REDIS_ENABLED=${FAQ_REDIS_ENABLED},FAQ_REDIS_ADDR=${FAQ_REDIS_ADDR},FAQ_POSTGRES_DSN=${FAQ_POSTGRES_DSN},AUTH_POSTGRES_DSN=${AUTH_POSTGRES_DSN},JWT_SECRET=${{ secrets.JWT_SECRET }},R2_ACCESS_KEY=${R2_ACCESS_KEY},R2_SECRET_KEY=${R2_SECRET_KEY},UPLOADASK_REDIS_ADDR=${UPLOADASK_REDIS_ADDR},UPLOADASK_POSTGRES_DSN=${UPLOADASK_POSTGRES_DSN}" \
             --allow-unauthenticated \
             --quiet

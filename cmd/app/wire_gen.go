@@ -24,6 +24,7 @@ func initializeApp() (*bootstrap.App, error) {
 	if err != nil {
 		return nil, err
 	}
+	// summarizer dependencies
 	slogLogger := logger.New()
 	summarizerConfig := provideSummaryConfig(configConfig)
 	client, err := provideChatGPTClient(configConfig)
@@ -31,17 +32,32 @@ func initializeApp() (*bootstrap.App, error) {
 		return nil, err
 	}
 	service := summarizer.NewService(summarizerConfig, client, slogLogger)
+	// uvadvisor dependencies
 	uvadvisorConfig := provideUVAdvisorConfig(configConfig)
 	datagovClient := provideUVClient(configConfig)
 	uvadvisorService := uvadvisor.NewService(uvadvisorConfig, datagovClient, client, slogLogger)
+	// faq dependencies
 	faqConfig := provideFAQConfig(configConfig)
 	questionRepository := provideFAQRepository(configConfig, slogLogger)
 	store := provideFAQStore(configConfig, slogLogger)
 	faqService := faq.NewService(faqConfig, questionRepository, store, client, slogLogger)
+	// upload ask dependencies
+	uploadAskConfig := provideUploadAskConfig(configConfig)
+	objectStorage := provideUploadStorage(configConfig, slogLogger)
+	uploadEmbedder := provideUploadEmbedder(client, configConfig, slogLogger)
+	chunker := provideUploadChunker()
+	uploadDocumentRepository := provideUploadDocumentRepository(configConfig, slogLogger)
+	uploadFileRepository := provideUploadFileRepository(configConfig, slogLogger)
+	uploadChunkRepository := provideUploadChunkRepository(configConfig, uploadDocumentRepository, slogLogger)
+	uploadQASessionRepository := provideUploadSessionRepository(configConfig, slogLogger)
+	uploadQueryLogRepository := provideUploadQueryLogRepository(configConfig, slogLogger)
+	uploadQueue := provideUploadQueue(configConfig, slogLogger)
+	uploadLLM := provideUploadLLM(client, configConfig, slogLogger)
+	uploadService := provideUploadService(uploadAskConfig, uploadDocumentRepository, uploadFileRepository, uploadChunkRepository, uploadQASessionRepository, uploadQueryLogRepository, objectStorage, uploadEmbedder, uploadLLM, chunker, uploadQueue, slogLogger)
 	authConfig := provideAuthConfig(configConfig)
 	repository := provideAuthRepository(configConfig, slogLogger)
 	authService := auth.NewService(authConfig, repository, slogLogger)
-	handler := http.NewHandler(service, uvadvisorService, faqService, authService, slogLogger)
+	handler := http.NewHandler(service, uvadvisorService, faqService, authService, uploadService, slogLogger)
 	server := http.NewRouter(configConfig, handler)
 	app := bootstrap.NewApp(configConfig, slogLogger, server)
 	return app, nil
