@@ -260,10 +260,14 @@ If the cache is unreachable the service automatically falls back to the in-memor
 
 ## Project Layout
 
-- `cmd/app`: Wire setup and entrypoint.
-- `internal/domain/summarizer`: Core business logic + ChatGPT integration.
-- `internal/interface/http`: Gin handlers, router, middleware.
-- `configs/config.yaml`: Default runtime configuration.
+- `cmd/app`: Wire setup, providers, HTTP server entrypoint.
+- `internal/domain`: Core business logic for summarizer, UV advisor, FAQ, auth, and upload-ask.
+- `internal/infra`: Integrations (ChatGPT client, pgvector repos, Valkey queues, R2 storage, config loading).
+  - `uploadask/*`: chunker, embedder, queue, storage, and pgvector repositories.
+  - `faqrepo/*`: FAQ pg/pgvector repository.
+- `internal/interface/http`: Gin handlers, router, middleware, error handling.
+- `configs/config.yaml`: Default runtime configuration (overridable via env).
+- `docs/`: Specs and schemas (FAQ, upload-ask, login).
 
 ## License
 
