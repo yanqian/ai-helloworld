@@ -3,7 +3,9 @@ package repo
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -195,16 +197,20 @@ func (r *PostgresChunkRepository) SearchSimilar(ctx context.Context, userID int6
 			doc           domain.Document
 			failureReason *string
 			score         float64
-			vec           pgvector.Vector
+			embeddingRaw  any
 		)
 		if err := rows.Scan(
-			&chunk.ID, &chunk.DocumentID, &chunk.ChunkIndex, &chunk.Content, &chunk.TokenCount, &vec, &chunk.CreatedAt,
+			&chunk.ID, &chunk.DocumentID, &chunk.ChunkIndex, &chunk.Content, &chunk.TokenCount, &embeddingRaw, &chunk.CreatedAt,
 			&doc.ID, &doc.UserID, &doc.Title, &doc.Source, &doc.Status, &failureReason, &doc.CreatedAt, &doc.UpdatedAt,
 			&score,
 		); err != nil {
 			return nil, err
 		}
-		chunk.Embedding = append([]float32(nil), vec.Slice()...)
+		parsed, err := normalizeEmbedding(embeddingRaw)
+		if err != nil {
+			return nil, err
+		}
+		chunk.Embedding = parsed
 		doc.FailureReason = failureReason
 		results = append(results, domain.RetrievedChunk{
 			Chunk:     chunk,
@@ -332,4 +338,42 @@ var _ domain.QueryLogRepository = (*PostgresQueryLogRepository)(nil)
 
 func itoa(v int) string {
 	return strconv.Itoa(v)
+}
+
+func normalizeEmbedding(raw any) ([]float32, error) {
+	switch v := raw.(type) {
+	case pgvector.Vector:
+		return append([]float32(nil), v.Slice()...), nil
+	case []float32:
+		return append([]float32(nil), v...), nil
+	case []float64:
+		out := make([]float32, len(v))
+		for i, f := range v {
+			out[i] = float32(f)
+		}
+		return out, nil
+	case string:
+		trimmed := strings.TrimSpace(v)
+		trimmed = strings.TrimPrefix(trimmed, "[")
+		trimmed = strings.TrimSuffix(trimmed, "]")
+		if trimmed == "" {
+			return nil, nil
+		}
+		parts := strings.Split(trimmed, ",")
+		out := make([]float32, 0, len(parts))
+		for _, p := range parts {
+			numStr := strings.TrimSpace(p)
+			if numStr == "" {
+				continue
+			}
+			f, err := strconv.ParseFloat(numStr, 32)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, float32(f))
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("unsupported embedding type %T", raw)
+	}
 }

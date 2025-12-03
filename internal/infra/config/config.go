@@ -164,6 +164,16 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("HTTP_ADDRESS"); v != "" {
 		cfg.HTTP.Address = v
 	}
+	if v := os.Getenv("HTTP_READ_TIMEOUT"); v != "" {
+		if parsed, err := time.ParseDuration(v); err == nil {
+			cfg.HTTP.ReadTimeout = parsed
+		}
+	}
+	if v := os.Getenv("HTTP_WRITE_TIMEOUT"); v != "" {
+		if parsed, err := time.ParseDuration(v); err == nil {
+			cfg.HTTP.WriteTimeout = parsed
+		}
+	}
 	if v := os.Getenv("HTTP_ALLOWED_ORIGINS"); v != "" {
 		cfg.HTTP.AllowedOrigins = splitAndTrim(v)
 	}
@@ -352,9 +362,7 @@ func applyEnvOverrides(cfg *Config) {
 func defaultConfig() *Config {
 	return &Config{
 		HTTP: HTTPConfig{
-			Address:      ":8080",
-			ReadTimeout:  5 * time.Second,
-			WriteTimeout: 5 * time.Second,
+			Address: ":8080",
 			AllowedOrigins: []string{
 				"*",
 			},
@@ -372,6 +380,7 @@ func defaultConfig() *Config {
 					"/api/v1/auth/login",
 					"/api/v1/auth/register",
 					"/api/v1/auth/refresh",
+					"/api/v1/upload-ask/documents",
 				},
 			},
 		},

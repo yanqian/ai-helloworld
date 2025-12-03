@@ -20,8 +20,11 @@ build:
 	go build -o bin/$(APP_NAME) ./cmd/app
 
 run:
-	export LOG_LEVEL=debug
+	set -a; \
+	source .env; \
+	set +a; \
 	./bin/$(APP_NAME)
+
 
 docker-build:
 	docker build -t $(IMAGE):$(TAG) .

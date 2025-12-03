@@ -44,6 +44,7 @@ func (q *ValkeyQueue) SetHandler(handler Handler) {
 	if handler == nil {
 		return
 	}
+	q.logger.Info("valkey queue worker starting", "queue", q.queueKey)
 	go q.consume()
 }
 
@@ -90,6 +91,7 @@ func (q *ValkeyQueue) consume() {
 			q.logger.Warn("valkey queue unmarshal failed", "error", err)
 			continue
 		}
+		q.logger.Info("valkey queue job received", "name", job.Name)
 		q.handler(ctx, job.Name, job.Payload)
 	}
 }

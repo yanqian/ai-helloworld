@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"log/slog"
@@ -25,7 +26,7 @@ func withRetry(handler http.Handler, cfg config.RetryConfig, logger *slog.Logger
 		exclusions[path] = struct{}{}
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, skip := exclusions[r.URL.Path]; skip || r.Method != http.MethodPost {
+		if _, skip := exclusions[r.URL.Path]; skip || r.Method != http.MethodPost || isMultipart(r) {
 			handler.ServeHTTP(w, r)
 			return
 		}
@@ -135,3 +136,8 @@ func (r *retryResponseRecorder) retryable() bool {
 }
 
 func (r *retryResponseRecorder) Flush() {}
+
+func isMultipart(r *http.Request) bool {
+	ct := r.Header.Get("Content-Type")
+	return strings.HasPrefix(strings.ToLower(ct), "multipart/")
+}

@@ -26,8 +26,9 @@ func NewR2Storage(endpoint, accessKey, secretKey, bucket, region string, logger 
 	if logger == nil {
 		logger = slog.Default()
 	}
+	cleanEndpoint := sanitizeEndpoint(endpoint)
 	useSSL := strings.HasPrefix(strings.ToLower(endpoint), "https")
-	client, err := minio.New(endpoint, &minio.Options{
+	client, err := minio.New(cleanEndpoint, &minio.Options{
 		Creds:        credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure:       useSSL,
 		Region:       region,
@@ -91,3 +92,17 @@ func (s *R2Storage) Delete(ctx context.Context, key string) error {
 }
 
 var _ domain.ObjectStorage = (*R2Storage)(nil)
+
+// sanitizeEndpoint removes schemes and paths to satisfy minio.New expectations.
+func sanitizeEndpoint(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return raw
+	}
+	raw = strings.TrimPrefix(strings.TrimPrefix(raw, "https://"), "http://")
+	if strings.Contains(raw, "/") {
+		parts := strings.Split(raw, "/")
+		raw = parts[0]
+	}
+	return raw
+}

@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/valkey-io/valkey-go"
 
@@ -374,6 +376,7 @@ func uploadPostgresPool(cfg *config.Config, logger *slog.Logger) *pgxpool.Pool {
 			logger.Error("invalid uploadask postgres dsn, using memory repositories", "error", err)
 			return
 		}
+		registerPgVector(poolConfig, logger)
 		if cfg.UploadAsk.Postgres.MaxConns > 0 {
 			poolConfig.MaxConns = cfg.UploadAsk.Postgres.MaxConns
 		}
@@ -396,4 +399,20 @@ func uploadPostgresPool(cfg *config.Config, logger *slog.Logger) *pgxpool.Pool {
 		uploadPool = pool
 	})
 	return uploadPool
+}
+
+func registerPgVector(poolConfig *pgxpool.Config, logger *slog.Logger) {
+	poolConfig.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		var oid uint32
+		if err := conn.QueryRow(ctx, "SELECT 'vector'::regtype::oid").Scan(&oid); err != nil {
+			logger.Error("failed to lookup pgvector oid", "error", err)
+			return err
+		}
+		conn.TypeMap().RegisterType(&pgtype.Type{
+			Name:  "vector",
+			OID:   oid,
+			Codec: pgtype.TextCodec{},
+		})
+		return nil
+	}
 }

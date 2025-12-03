@@ -114,7 +114,7 @@ func NewClient(apiKey, baseURL string) (*Client, error) {
 		apiKey:  apiKey,
 		baseURL: strings.TrimRight(baseURL, "/"),
 		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
+			Timeout: 180 * time.Second, // embeddings on large batches can take longer; cap at 3 minutes
 		},
 	}, nil
 }

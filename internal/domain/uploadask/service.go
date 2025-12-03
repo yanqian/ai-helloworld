@@ -156,6 +156,7 @@ func (s *Service) Upload(ctx context.Context, userID int64, req UploadRequest) (
 
 // ProcessDocument extracts, chunks, embeds, and stores chunks.
 func (s *Service) ProcessDocument(ctx context.Context, docID uuid.UUID, userID int64) error {
+	s.logger.Info("process_document start", "document_id", docID, "user_id", userID)
 	doc, found, err := s.docs.Get(ctx, docID, userID)
 	if err != nil {
 		return apperrors.Wrap("storage_error", "failed to load document", err)
@@ -229,6 +230,7 @@ func (s *Service) ProcessDocument(ctx context.Context, docID uuid.UUID, userID i
 	if err := s.docs.UpdateStatus(ctx, docID, DocumentStatusProcessed, nil); err != nil {
 		return apperrors.Wrap("storage_error", "failed to finalize document", err)
 	}
+	s.logger.Info("process_document complete", "document_id", docID, "user_id", userID, "chunks", len(chunks))
 	return nil
 }
 
