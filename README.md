@@ -1,6 +1,6 @@
 # Backend Service
 
-Go HTTP service that proxies requests to ChatGPT for text summaries and UV-based outfit/protection recommendations. It exposes endpoints under `/api/v1`.
+Go HTTP service that powers summarization, UV advice, Smart FAQ, and Upload & Ask (pgvector-backed RAG). It exposes endpoints under `/api/v1`.
 
 ## Getting Started
 
@@ -20,7 +20,7 @@ export JWT_SECRET=replace-this-with-a-secure-secret
 make run
 ```
 
-Configuration values come from environment variables, `configs/config.yaml`, or sane defaults (`internal/infra/config`). At minimum you must set `LLM_API_KEY` so the service can reach OpenAI/ChatGPT. UV advice relies on `UV_API_BASE_URL` (defaults to data.gov.sg) and can be fine-tuned via `UV_PROMPT`.
+Configuration values come from environment variables, `configs/config.yaml`, or sane defaults (`internal/infra/config`). At minimum you must set `LLM_API_KEY` so the service can reach OpenAI/ChatGPT. UV advice relies on `UV_API_BASE_URL` (defaults to data.gov.sg) and can be fine-tuned via `UV_PROMPT`. Upload & Ask requires Postgres + pgvector and optional Valkey/Redis for the background queue.
 
 ## API Usage
 
@@ -130,13 +130,46 @@ All errors use:
 - **Auth**: `JWT_SECRET` secures login tokens and `LLM_API_KEY` is mandatory for LLM access. The `/login` frontend route captures email/password/nickname, stores both tokens plus the nickname in `localStorage`, and silently exchanges refresh tokens when the access token expires.
 - **Prompt overrides**: Provide `prompt` in the request body to customize ChatGPT instructions; otherwise the default prompt in config is used.
 - **Logging**: Set `LOG_LEVEL=debug` to see raw LLM responses (logged before parsing). Logs are JSON to stdout.
-- **Timeouts**: HTTP read/write timeouts are configurable under the `http` section in config; ensure they exceed typical LLM latency.
+- **Timeouts**: HTTP read/write timeouts are configurable under the `http` section in config; ensure they exceed typical LLM latency and embedding latency.
 - **Protection**: Rate limits (`http.rateLimit`) and retry behavior (`http.retry`) are configurable so you can tune resiliency per environment.
 - **UV Advisor config**: Override `UV_API_BASE_URL` to point at a different data source or `UV_PROMPT` to change how the AI structures advice.
 - **Testing**: Run `GOCACHE=$(pwd)/.gocache go test ./...` to avoid sandbox cache issues.
 - **Re-run upload document processing** (Redis/Valkey queue only): push a job back onto the queue with the document and user IDs:
   `redis-cli -u "$UPLOADASK_REDIS_ADDR" LPUSH 'uploadask:jobs' '{"name":"process_document","payload":{"document_id":"<doc-uuid>","user_id":<user-id>}}'`
   If the document is marked `failed`, you can reset it first: `UPDATE upload_documents SET status='pending', failure_reason=NULL WHERE id='<doc-uuid>';`
+
+## Upload & Ask API (pgvector)
+
+Endpoints live under `/api/v1/upload-ask/*` and require auth:
+
+- `POST /documents` (multipart) — upload a file; stored in R2/memory, metadata persisted in Postgres.
+- `GET /documents` — list documents for the user.
+- `GET /documents/:id` — fetch document metadata.
+- `POST /qa/query` — embed the question, run pgvector similarity over processed chunks, and call the LLM to answer with citations.
+- `GET /qa/sessions` — list previous QA sessions.
+- `GET /qa/sessions/:id/logs` — view prior Q/A exchanges.
+
+### Dependencies
+
+- **Postgres + pgvector**: required for document/chunk storage. The pool registers the `vector` type automatically; pgvector must be installed (`CREATE EXTENSION vector`).
+- **Valkey/Redis** (optional): queues background document processing (`uploadask:jobs` list) and can be disabled to process synchronously.
+- **Object storage**: R2 adapter; falls back to in-memory storage for local dev.
+
+### Configuration
+
+Set via `configs/config.yaml` or env:
+
+- `UPLOADASK_POSTGRES_DSN` — Postgres DSN (required for persistence).
+- `UPLOADASK_REDIS_ADDR` — enables Valkey/Redis queue when set.
+- `UPLOADASK_STORAGE_*` — R2 endpoint/access/secret/bucket (otherwise in-memory).
+- `UPLOADASK_VECTOR_DIM` — embedding vector dimension (defaults to 1536 for `text-embedding-3-small`).
+- `HTTP_WRITE_TIMEOUT` — ensure this exceeds worst-case embed + chat latency; otherwise clients see socket hangups even if the handler finishes.
+
+### Behavior
+
+1. Upload: store metadata + blob, enqueue processing.
+2. Process: chunk text, embed via OpenAI-compatible embeddings, persist chunks with pgvector, mark document processed.
+3. Query: embed question, search pgvector, return top chunks + LLM answer with inline citations.
 
 ## UV Advisor API
 
