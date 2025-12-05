@@ -4,6 +4,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/pkoukk/tiktoken-go"
+
 	domain "github.com/yanqian/ai-helloworld/internal/domain/uploadask"
 )
 
@@ -11,6 +13,7 @@ import (
 type SimpleChunker struct {
 	MaxTokens int
 	Overlap   int
+	encoder   *tiktoken.Tiktoken
 }
 
 // NewSimpleChunker constructs a chunker with defaults.
@@ -21,7 +24,11 @@ func NewSimpleChunker(maxTokens, overlap int) *SimpleChunker {
 	if overlap < 0 {
 		overlap = 0
 	}
-	return &SimpleChunker{MaxTokens: maxTokens, Overlap: overlap}
+	enc, err := tiktoken.GetEncoding("cl100k_base")
+	if err != nil {
+		enc = nil
+	}
+	return &SimpleChunker{MaxTokens: maxTokens, Overlap: overlap, encoder: enc}
 }
 
 // Chunk splits by paragraphs and then by token budget.
@@ -46,7 +53,7 @@ func (c *SimpleChunker) Chunk(text string) []domain.ChunkCandidate {
 			currentRunes = 0
 			return
 		}
-		tokenCount := countTokens(content)
+		tokenCount := c.countTokens(content)
 		out = append(out, domain.ChunkCandidate{
 			Index:      index,
 			Content:    content,
@@ -80,10 +87,10 @@ func (c *SimpleChunker) Chunk(text string) []domain.ChunkCandidate {
 				continue
 			}
 
-			if currentRunes+wordRunes > maxRunes || countTokens(current.String()+word) >= c.MaxTokens {
+			if currentRunes+wordRunes > maxRunes || c.countTokens(current.String()+word) >= c.MaxTokens {
 				flush()
 				if c.Overlap > 0 && len(out) > 0 {
-					overlap := tailTokens(out[len(out)-1].Content, c.Overlap)
+					overlap := c.tailTokens(out[len(out)-1].Content, c.Overlap)
 					current.WriteString(overlap)
 					currentRunes = utf8.RuneCountInString(overlap)
 				}
@@ -101,20 +108,36 @@ func (c *SimpleChunker) Chunk(text string) []domain.ChunkCandidate {
 	return out
 }
 
-func countTokens(text string) int {
+func (c *SimpleChunker) countTokens(text string) int {
 	if text == "" {
 		return 0
+	}
+	if c.encoder != nil {
+		ids := c.encoder.Encode(text, nil, nil)
+		return len(ids)
 	}
 	return len(strings.Fields(text))
 }
 
-func tailTokens(text string, limit int) string {
-	tokens := strings.Fields(text)
-	if len(tokens) <= limit {
-		return text
+func (c *SimpleChunker) tailTokens(text string, limit int) string {
+	if limit <= 0 || text == "" {
+		return ""
 	}
-	tokens = tokens[len(tokens)-limit:]
-	return strings.Join(tokens, " ") + " "
+	if c.encoder != nil {
+		ids := c.encoder.Encode(text, nil, nil)
+		if len(ids) <= limit {
+			return text + " "
+		}
+		tail := ids[len(ids)-limit:]
+		decoded := c.encoder.Decode(tail)
+		return decoded + " "
+	}
+	words := strings.Fields(text)
+	if len(words) <= limit {
+		return text + " "
+	}
+	words = words[len(words)-limit:]
+	return strings.Join(words, " ") + " "
 }
 
 // splitLongWord slices a long token-free string into smaller pieces to avoid oversize chunks.
