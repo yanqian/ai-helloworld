@@ -56,7 +56,7 @@ uploadAsk:
   maxFileMb: 20
   maxPreviewChars: 512
   memory:
-    enabled: false
+    enabled: true
     topKMems: 3
     maxHistoryTokens: 800
     memoryVectorDim: 1536
