@@ -77,6 +77,19 @@ type QueryLogRepository interface {
 	ListBySession(ctx context.Context, sessionID uuid.UUID, userID int64) ([]QueryLog, error)
 }
 
+// MessageLog persists conversational turns for a session.
+type MessageLog interface {
+	Append(ctx context.Context, msg ConversationMessage) error
+	ListRecent(ctx context.Context, userID int64, sessionID uuid.UUID, maxTokens int, maxMessages int) ([]ConversationMessage, error)
+}
+
+// MemoryStore manages long-term memories for a user/session.
+type MemoryStore interface {
+	Upsert(ctx context.Context, mem MemoryRecord) error
+	Search(ctx context.Context, userID int64, sessionID uuid.UUID, embedding []float32, k int) ([]RetrievedMemory, error)
+	Prune(ctx context.Context, userID int64, sessionID *uuid.UUID, limit int) error
+}
+
 // JobQueue enqueues processing tasks.
 type JobQueue interface {
 	Enqueue(ctx context.Context, name string, payload any) error

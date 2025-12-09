@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -20,6 +21,17 @@ type Config struct {
 	MaxFileBytes    int64
 	MaxRetrieved    int
 	MaxPreviewChars int
+	Memory          MemoryConfig
+}
+
+// MemoryConfig controls conversational memory behavior.
+type MemoryConfig struct {
+	Enabled            bool
+	TopKMems           int
+	MaxHistoryTokens   int
+	MemoryVectorDim    int
+	SummaryEveryNTurns int
+	PruneLimit         int
 }
 
 // Service orchestrates the Upload-and-Ask workflows.
@@ -35,11 +47,13 @@ type Service struct {
 	llm      LLM
 	chunker  Chunker
 	queue    JobQueue
+	messages MessageLog
+	memories MemoryStore
 	logger   *slog.Logger
 }
 
 // NewService constructs a Service.
-func NewService(cfg Config, docs DocumentRepository, files FileObjectRepository, chunks ChunkRepository, sessions QASessionRepository, logs QueryLogRepository, storage ObjectStorage, embedder Embedder, llm LLM, chunker Chunker, queue JobQueue, logger *slog.Logger) *Service {
+func NewService(cfg Config, docs DocumentRepository, files FileObjectRepository, chunks ChunkRepository, sessions QASessionRepository, logs QueryLogRepository, messages MessageLog, memories MemoryStore, storage ObjectStorage, embedder Embedder, llm LLM, chunker Chunker, queue JobQueue, logger *slog.Logger) *Service {
 	return &Service{
 		cfg:      cfg,
 		docs:     docs,
@@ -47,6 +61,8 @@ func NewService(cfg Config, docs DocumentRepository, files FileObjectRepository,
 		chunks:   chunks,
 		sessions: sessions,
 		logs:     logs,
+		messages: messages,
+		memories: memories,
 		storage:  storage,
 		embedder: embedder,
 		llm:      llm,
@@ -71,18 +87,23 @@ type UploadResponse struct {
 
 // AskRequest contains the question payload.
 type AskRequest struct {
-	Query       string
-	SessionID   *uuid.UUID
-	DocumentIDs []uuid.UUID
-	TopK        int
+	Query            string
+	SessionID        *uuid.UUID
+	DocumentIDs      []uuid.UUID
+	TopK             int
+	TopKMems         *int
+	MaxHistoryTokens *int
+	IncludeHistory   *bool
 }
 
 // AskResponse is returned to the HTTP handler.
 type AskResponse struct {
-	SessionID uuid.UUID     `json:"sessionId"`
-	Answer    string        `json:"answer"`
-	Sources   []ChunkSource `json:"sources"`
-	LatencyMs int64         `json:"latencyMs"`
+	SessionID         uuid.UUID         `json:"sessionId"`
+	Answer            string            `json:"answer"`
+	Sources           []ChunkSource     `json:"sources"`
+	Memories          []RetrievedMemory `json:"memories,omitempty"`
+	UsedHistoryTokens int               `json:"usedHistoryTokens"`
+	LatencyMs         int64             `json:"latencyMs"`
 }
 
 // Upload persists the document metadata, stores the blob, and enqueues processing.
@@ -243,14 +264,25 @@ func (s *Service) Ask(ctx context.Context, userID int64, req AskRequest) (AskRes
 	if query == "" {
 		return AskResponse{}, apperrors.Wrap("invalid_input", "query cannot be empty", nil)
 	}
-	topK := req.TopK
-	if topK <= 0 {
-		topK = s.cfg.MaxRetrieved
-		if topK <= 0 {
-			topK = 8
+	topKDocs := req.TopK
+	if topKDocs <= 0 {
+		topKDocs = s.cfg.MaxRetrieved
+		if topKDocs <= 0 {
+			topKDocs = 8
 		}
 	}
-	embedding, err := s.embedText(ctx, query)
+	topKMems := s.resolveTopKMems(req.TopKMems)
+	maxHistoryTokens := s.resolveMaxHistoryTokens(req.MaxHistoryTokens)
+	includeHistory := s.shouldIncludeHistory(req.IncludeHistory)
+
+	sessionID, err := s.ensureSession(ctx, userID, req.SessionID)
+	if err != nil {
+		return AskResponse{}, err
+	}
+
+	history, usedHistoryTokens := s.loadHistory(ctx, userID, sessionID, maxHistoryTokens, includeHistory)
+	semanticQuery := s.buildSemanticQuery(query, history)
+	embedding, err := s.embedText(ctx, semanticQuery)
 	if err != nil {
 		return AskResponse{}, err
 	}
@@ -262,35 +294,17 @@ func (s *Service) Ask(ctx context.Context, userID int64, req AskRequest) (AskRes
 	if err != nil {
 		return AskResponse{}, apperrors.Wrap("storage_error", "search failed", err)
 	}
-	if len(results) > topK {
-		results = results[:topK]
+	if len(results) > topKDocs {
+		results = results[:topKDocs]
 	}
+	memories := s.searchMemories(ctx, userID, sessionID, embedding, topKMems)
 
-	sessionID := uuid.New()
-	if req.SessionID != nil {
-		sessionID = *req.SessionID
-	} else {
-		session := QASession{
-			ID:        sessionID,
-			UserID:    userID,
-			CreatedAt: time.Now(),
-		}
-		_ = s.sessions.Create(ctx, session)
-	}
-
+	messages := s.buildPrompt(query, results, memories, history, includeHistory)
 	start := time.Now()
-	answer := s.answerWithContext(ctx, query, results)
+	answer := s.answerWithPrompt(ctx, query, results, memories, messages)
 	latency := time.Since(start).Milliseconds()
 
-	sources := make([]ChunkSource, 0, len(results))
-	for _, r := range results {
-		sources = append(sources, ChunkSource{
-			DocumentID: r.Chunk.DocumentID,
-			ChunkIndex: r.Chunk.ChunkIndex,
-			Score:      r.Score,
-			Preview:    snippet(r.Chunk.Content, s.cfg.MaxPreviewChars),
-		})
-	}
+	sources := s.buildChunkSources(results)
 	log := QueryLog{
 		ID:           uuid.New(),
 		SessionID:    sessionID,
@@ -302,12 +316,323 @@ func (s *Service) Ask(ctx context.Context, userID int64, req AskRequest) (AskRes
 	}
 	_ = s.logs.Append(ctx, log)
 
+	s.appendMessages(ctx, userID, sessionID, query, answer)
+	s.persistTurnMemory(ctx, userID, sessionID, query, answer)
+	s.maybeTriggerSummary(ctx, userID, sessionID, len(history)+2)
+
 	return AskResponse{
-		SessionID: sessionID,
-		Answer:    answer,
-		Sources:   sources,
-		LatencyMs: latency,
+		SessionID:         sessionID,
+		Answer:            answer,
+		Sources:           sources,
+		Memories:          memories,
+		UsedHistoryTokens: usedHistoryTokens,
+		LatencyMs:         latency,
 	}, nil
+}
+
+func (s *Service) resolveTopKMems(val *int) int {
+	if val != nil {
+		return *val
+	}
+	return s.cfg.Memory.TopKMems
+}
+
+func (s *Service) resolveMaxHistoryTokens(val *int) int {
+	if val != nil {
+		return *val
+	}
+	return s.cfg.Memory.MaxHistoryTokens
+}
+
+func (s *Service) shouldIncludeHistory(flag *bool) bool {
+	if flag != nil {
+		return *flag
+	}
+	return s.cfg.Memory.Enabled
+}
+
+func (s *Service) ensureSession(ctx context.Context, userID int64, requested *uuid.UUID) (uuid.UUID, error) {
+	if requested != nil {
+		session, found, err := s.sessions.Find(ctx, *requested, userID)
+		if err != nil {
+			return uuid.Nil, apperrors.Wrap("storage_error", "failed to load session", err)
+		}
+		if !found || session.UserID != userID {
+			return uuid.Nil, apperrors.Wrap("not_found", "session not found", nil)
+		}
+		return session.ID, nil
+	}
+	id := uuid.New()
+	session := QASession{
+		ID:        id,
+		UserID:    userID,
+		CreatedAt: time.Now(),
+	}
+	_ = s.sessions.Create(ctx, session)
+	return id, nil
+}
+
+func (s *Service) loadHistory(ctx context.Context, userID int64, sessionID uuid.UUID, maxTokens int, include bool) ([]ConversationMessage, int) {
+	if s.messages == nil || !include {
+		return nil, 0
+	}
+	msgs, err := s.messages.ListRecent(ctx, userID, sessionID, maxTokens, 50)
+	if err != nil {
+		s.logger.Warn("failed to list recent messages", "error", err)
+		return nil, 0
+	}
+	return msgs, sumTokens(msgs)
+}
+
+func (s *Service) buildSemanticQuery(query string, history []ConversationMessage) string {
+	summary := summarizeHistory(history, 3, 500)
+	if summary == "" {
+		return query
+	}
+	return fmt.Sprintf("%s\n\nRecent history: %s", query, summary)
+}
+
+func summarizeHistory(history []ConversationMessage, maxEntries int, maxChars int) string {
+	if len(history) == 0 || maxEntries <= 0 {
+		return ""
+	}
+	var builder strings.Builder
+	count := 0
+	for i := len(history) - 1; i >= 0 && count < maxEntries; i-- {
+		line := fmt.Sprintf("%s: %s", history[i].Role, history[i].Content)
+		if maxChars > 0 && builder.Len()+len(line) > maxChars {
+			break
+		}
+		if builder.Len() > 0 {
+			builder.WriteString(" | ")
+		}
+		builder.WriteString(line)
+		count++
+	}
+	return builder.String()
+}
+
+func (s *Service) searchMemories(ctx context.Context, userID int64, sessionID uuid.UUID, embedding []float32, topK int) []RetrievedMemory {
+	if !s.cfg.Memory.Enabled || s.memories == nil || topK <= 0 || len(embedding) == 0 {
+		return nil
+	}
+	memories, err := s.memories.Search(ctx, userID, sessionID, embedding, topK)
+	if err != nil {
+		s.logger.Warn("memory search failed", "error", err)
+		return nil
+	}
+	return memories
+}
+
+func (s *Service) buildPrompt(query string, chunks []RetrievedChunk, memories []RetrievedMemory, history []ConversationMessage, includeHistory bool) []LLMMessage {
+	messages := []LLMMessage{
+		{Role: "system", Content: "You are a helpful assistant that answers questions using the provided context. Cite document and chunk numbers when using document content."},
+	}
+	if ctx := s.buildContextBlock(chunks, memories); ctx != "" {
+		messages = append(messages, LLMMessage{Role: "system", Content: "Context:\n" + ctx})
+	}
+	if includeHistory {
+		for _, msg := range history {
+			messages = append(messages, LLMMessage{Role: string(msg.Role), Content: msg.Content})
+		}
+	}
+	messages = append(messages, LLMMessage{Role: "user", Content: query})
+	return messages
+}
+
+func (s *Service) buildContextBlock(chunks []RetrievedChunk, memories []RetrievedMemory) string {
+	var builder strings.Builder
+	for _, rc := range chunks {
+		chunk := rc.Chunk
+		builder.WriteString(fmt.Sprintf("Doc %s chunk %d:\n%s\n\n", chunk.DocumentID.String(), chunk.ChunkIndex, chunk.Content))
+	}
+	if len(memories) > 0 {
+		builder.WriteString("Memories:\n")
+		for _, mem := range memories {
+			builder.WriteString(fmt.Sprintf("- [%s] %s\n", mem.Memory.Source, mem.Memory.Content))
+		}
+		builder.WriteString("\n")
+	}
+	return builder.String()
+}
+
+func (s *Service) answerWithPrompt(ctx context.Context, query string, chunks []RetrievedChunk, memories []RetrievedMemory, messages []LLMMessage) string {
+	answer, err := s.llm.Chat(ctx, messages)
+	if err != nil || strings.TrimSpace(answer) == "" {
+		s.logger.Warn("llm chat failed, falling back to heuristic answer", "error", err)
+		if len(chunks) == 0 && len(memories) == 0 {
+			return "No relevant context available to answer this question."
+		}
+		return fmt.Sprintf("%s\n\nBased on %d context items.", query, len(chunks)+len(memories))
+	}
+	return answer
+}
+
+func (s *Service) buildChunkSources(results []RetrievedChunk) []ChunkSource {
+	sources := make([]ChunkSource, 0, len(results))
+	for _, r := range results {
+		sources = append(sources, ChunkSource{
+			DocumentID: r.Chunk.DocumentID,
+			ChunkIndex: r.Chunk.ChunkIndex,
+			Score:      r.Score,
+			Preview:    snippet(r.Chunk.Content, s.cfg.MaxPreviewChars),
+		})
+	}
+	return sources
+}
+
+func (s *Service) appendMessages(ctx context.Context, userID int64, sessionID uuid.UUID, query, answer string) {
+	if s.messages == nil {
+		return
+	}
+	now := time.Now()
+	for _, msg := range []ConversationMessage{
+		{SessionID: sessionID, UserID: userID, Role: MessageRoleUser, Content: query, TokenCount: estimateTokens(query), CreatedAt: now},
+		{SessionID: sessionID, UserID: userID, Role: MessageRoleAssistant, Content: answer, TokenCount: estimateTokens(answer), CreatedAt: now},
+	} {
+		if err := s.messages.Append(ctx, msg); err != nil {
+			s.logger.Warn("failed to append conversation message", "role", msg.Role, "error", err)
+		}
+	}
+}
+
+func (s *Service) persistTurnMemory(ctx context.Context, userID int64, sessionID uuid.UUID, query, answer string) {
+	if !s.cfg.Memory.Enabled || s.memories == nil {
+		return
+	}
+	content := fmt.Sprintf("[Q]\n%s\n[Answer]\n%s", query, answer)
+	if strings.TrimSpace(answer) == "" {
+		return
+	}
+	embedding, err := s.embedText(ctx, content)
+	if err != nil {
+		s.logger.Warn("failed to embed qa turn memory", "error", err)
+		return
+	}
+	mem := MemoryRecord{
+		SessionID:  sessionID,
+		UserID:     userID,
+		Source:     MemorySourceQATurn,
+		Content:    content,
+		Embedding:  embedding,
+		Importance: 0,
+		CreatedAt:  time.Now(),
+	}
+	if err := s.memories.Upsert(ctx, mem); err != nil {
+		s.logger.Warn("failed to upsert qa memory", "error", err)
+	}
+	if s.cfg.Memory.PruneLimit > 0 {
+		if err := s.memories.Prune(ctx, userID, &sessionID, s.cfg.Memory.PruneLimit); err != nil {
+			s.logger.Warn("memory prune failed", "error", err)
+		}
+	}
+}
+
+func (s *Service) maybeTriggerSummary(ctx context.Context, userID int64, sessionID uuid.UUID, turns int) {
+	if !s.cfg.Memory.Enabled || s.cfg.Memory.SummaryEveryNTurns <= 0 || s.queue == nil {
+		return
+	}
+	if turns%s.cfg.Memory.SummaryEveryNTurns == 0 {
+		payload := map[string]any{
+			"session_id": sessionID.String(),
+			"user_id":    userID,
+		}
+		if err := s.queue.Enqueue(ctx, "summarize_session", payload); err != nil {
+			s.logger.Warn("summary enqueue failed", "error", err)
+			return
+		}
+		s.logger.Debug("summary job enqueued", "turns", turns, "session_id", sessionID)
+	}
+}
+
+// SummarizeSession condenses recent history into a long-term memory via the LLM and stores it.
+func (s *Service) SummarizeSession(ctx context.Context, userID int64, sessionID uuid.UUID) {
+	if !s.cfg.Memory.Enabled || s.llm == nil || s.embedder == nil || s.memories == nil || s.messages == nil {
+		return
+	}
+	maxTokens := s.cfg.Memory.MaxHistoryTokens
+	if maxTokens <= 0 {
+		maxTokens = 800
+	}
+	history, err := s.messages.ListRecent(ctx, userID, sessionID, maxTokens, 200)
+	if err != nil {
+		s.logger.Warn("failed to load history for summary", "error", err)
+		return
+	}
+	if len(history) == 0 {
+		return
+	}
+	var builder strings.Builder
+	for _, msg := range history {
+		builder.WriteString(fmt.Sprintf("%s: %s\n", msg.Role, strings.TrimSpace(msg.Content)))
+	}
+
+	prompt := []LLMMessage{
+		{
+			Role: "system",
+			Content: "Summarize the conversation into a concise factual note (<=120 words) suitable for long-term recall. " +
+				"Omit greetings or fluff; keep actionable facts, questions, and answers.",
+		},
+		{Role: "user", Content: builder.String()},
+	}
+	summary, err := s.llm.Chat(ctx, prompt)
+	if err != nil {
+		s.logger.Warn("summary llm call failed", "error", err)
+		return
+	}
+	summary = strings.TrimSpace(summary)
+	if summary == "" {
+		return
+	}
+	embedding, err := s.embedText(ctx, summary)
+	if err != nil {
+		s.logger.Warn("summary embedding failed", "error", err)
+		return
+	}
+	mem := MemoryRecord{
+		SessionID:  sessionID,
+		UserID:     userID,
+		Source:     MemorySourceSummary,
+		Content:    summary,
+		Embedding:  embedding,
+		Importance: 1,
+		CreatedAt:  time.Now(),
+	}
+	if err := s.memories.Upsert(ctx, mem); err != nil {
+		s.logger.Warn("failed to upsert summary memory", "error", err)
+	}
+	if s.cfg.Memory.PruneLimit > 0 {
+		if err := s.memories.Prune(ctx, userID, &sessionID, s.cfg.Memory.PruneLimit); err != nil {
+			s.logger.Warn("summary memory prune failed", "error", err)
+		}
+	}
+}
+
+func sumTokens(msgs []ConversationMessage) int {
+	total := 0
+	for _, msg := range msgs {
+		if msg.TokenCount > 0 {
+			total += msg.TokenCount
+		}
+	}
+	return total
+}
+
+func estimateTokens(text string) int {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return 0
+	}
+	words := len(strings.Fields(trimmed))
+	runes := utf8.RuneCountInString(trimmed)
+	tokens := runes / 4
+	if tokens < words {
+		tokens = words
+	}
+	if tokens == 0 {
+		tokens = 1
+	}
+	return tokens
 }
 
 // ListDocuments returns user scoped documents.
@@ -359,27 +684,6 @@ func (s *Service) embedText(ctx context.Context, text string) ([]float32, error)
 		return nil, apperrors.Wrap("embedding_error", "no embedding returned", nil)
 	}
 	return embeddings[0], nil
-}
-
-func (s *Service) answerWithContext(ctx context.Context, query string, chunks []RetrievedChunk) string {
-	var contextBuilder strings.Builder
-	for _, rc := range chunks {
-		chunk := rc.Chunk
-		contextBuilder.WriteString(fmt.Sprintf("Doc %s chunk %d:\n%s\n\n", chunk.DocumentID.String(), chunk.ChunkIndex, chunk.Content))
-	}
-	messages := []LLMMessage{
-		{Role: "system", Content: "You are a helpful assistant that answers questions using the provided context. Cite document and chunk numbers in the response."},
-		{Role: "user", Content: fmt.Sprintf("Question: %s\n\nContext:\n%s", query, contextBuilder.String())},
-	}
-	answer, err := s.llm.Chat(ctx, messages)
-	if err != nil || strings.TrimSpace(answer) == "" {
-		s.logger.Warn("llm chat failed, falling back to heuristic answer", "error", err)
-		if len(chunks) == 0 {
-			return "No relevant context available to answer this question."
-		}
-		return fmt.Sprintf("%s\n\nBased on %d context chunks.", query, len(chunks))
-	}
-	return answer
 }
 
 func sanitizeFilename(name string) string {

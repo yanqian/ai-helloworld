@@ -27,6 +27,7 @@ import (
 	uploadchunker "github.com/yanqian/ai-helloworld/internal/infra/uploadask/chunker"
 	uploadembedder "github.com/yanqian/ai-helloworld/internal/infra/uploadask/embedder"
 	uploadllm "github.com/yanqian/ai-helloworld/internal/infra/uploadask/llm"
+	uploadmemory "github.com/yanqian/ai-helloworld/internal/infra/uploadask/memory"
 	uploadqueue "github.com/yanqian/ai-helloworld/internal/infra/uploadask/queue"
 	uploadrepo "github.com/yanqian/ai-helloworld/internal/infra/uploadask/repo"
 	uploadstorage "github.com/yanqian/ai-helloworld/internal/infra/uploadask/storage"
@@ -175,11 +176,32 @@ func provideAuthRepository(cfg *config.Config, logger *slog.Logger) auth.Reposit
 }
 
 func provideUploadAskConfig(cfg *config.Config) uploadask.Config {
+	memCfg := cfg.UploadAsk.Memory
+	if memCfg.MemoryVectorDim <= 0 {
+		memCfg.MemoryVectorDim = cfg.UploadAsk.VectorDim
+	}
+	if memCfg.TopKMems <= 0 {
+		memCfg.TopKMems = 3
+	}
+	if memCfg.MaxHistoryTokens <= 0 {
+		memCfg.MaxHistoryTokens = 800
+	}
+	if memCfg.PruneLimit <= 0 {
+		memCfg.PruneLimit = 200
+	}
 	return uploadask.Config{
 		VectorDim:       cfg.UploadAsk.VectorDim,
 		MaxFileBytes:    int64(cfg.UploadAsk.MaxFileMB) * 1024 * 1024,
 		MaxRetrieved:    8,
 		MaxPreviewChars: cfg.UploadAsk.MaxPreviewChars,
+		Memory: uploadask.MemoryConfig{
+			Enabled:            memCfg.Enabled,
+			TopKMems:           memCfg.TopKMems,
+			MaxHistoryTokens:   memCfg.MaxHistoryTokens,
+			MemoryVectorDim:    memCfg.MemoryVectorDim,
+			SummaryEveryNTurns: memCfg.SummaryEveryNTurns,
+			PruneLimit:         memCfg.PruneLimit,
+		},
 	}
 }
 
@@ -261,6 +283,28 @@ func provideUploadQueryLogRepository(cfg *config.Config, logger *slog.Logger) up
 	return uploadrepo.NewMemoryQueryLogRepository()
 }
 
+func provideUploadMessageLog(cfg *config.Config, logger *slog.Logger) uploadask.MessageLog {
+	pool := uploadPostgresPool(cfg, logger)
+	if pool != nil {
+		return uploadmemory.NewPostgresMessageLog(pool)
+	}
+	logger.Warn("uploadask message log falling back to memory")
+	return uploadmemory.NewMemoryMessageLog()
+}
+
+func provideUploadMemoryStore(cfg *config.Config, logger *slog.Logger) uploadask.MemoryStore {
+	if !cfg.UploadAsk.Memory.Enabled {
+		logger.Info("uploadask memory disabled")
+		return nil
+	}
+	pool := uploadPostgresPool(cfg, logger)
+	if pool != nil {
+		return uploadmemory.NewPostgresMemoryStore(pool)
+	}
+	logger.Warn("uploadask memory store falling back to memory")
+	return uploadmemory.NewMemoryStore()
+}
+
 func provideUploadQueue(cfg *config.Config, logger *slog.Logger) uploadqueue.HandlerQueue {
 	if cfg.UploadAsk.Redis.Enabled {
 		opt, err := buildValkeyOptions(cfg.UploadAsk.Redis.Addr)
@@ -287,31 +331,50 @@ func provideUploadLLM(client *chatgpt.Client, cfg *config.Config, logger *slog.L
 	return uploadllm.NewChatGPTLLM(client, cfg.LLM.Model, cfg.LLM.Temperature)
 }
 
-func provideUploadService(appCfg uploadask.Config, docs uploadask.DocumentRepository, files uploadask.FileObjectRepository, chunks uploadask.ChunkRepository, sessions uploadask.QASessionRepository, logs uploadask.QueryLogRepository, storage uploadask.ObjectStorage, embedder uploadask.Embedder, llm uploadask.LLM, chunker uploadask.Chunker, queue uploadqueue.HandlerQueue, logger *slog.Logger) *uploadask.Service {
-	svc := uploadask.NewService(appCfg, docs, files, chunks, sessions, logs, storage, embedder, llm, chunker, queue, logger)
+func provideUploadService(appCfg uploadask.Config, docs uploadask.DocumentRepository, files uploadask.FileObjectRepository, chunks uploadask.ChunkRepository, sessions uploadask.QASessionRepository, logs uploadask.QueryLogRepository, messages uploadask.MessageLog, memories uploadask.MemoryStore, storage uploadask.ObjectStorage, embedder uploadask.Embedder, llm uploadask.LLM, chunker uploadask.Chunker, queue uploadqueue.HandlerQueue, logger *slog.Logger) *uploadask.Service {
+	svc := uploadask.NewService(appCfg, docs, files, chunks, sessions, logs, messages, memories, storage, embedder, llm, chunker, queue, logger)
 	queue.SetHandler(func(ctx context.Context, name string, payload map[string]any) {
-		if name != "process_document" {
-			return
-		}
-		rawDocID, ok := payload["document_id"]
-		if !ok {
-			return
-		}
-		rawUserID, ok := payload["user_id"]
-		if !ok {
-			return
-		}
-		docID, err := parseUUID(rawDocID)
-		if err != nil {
-			logger.Warn("invalid document id in queue payload", "error", err)
-			return
-		}
-		userID := parseUserID(rawUserID)
-		if userID == 0 {
-			return
-		}
-		if err := svc.ProcessDocument(ctx, docID, userID); err != nil {
-			logger.Warn("process_document failed", "error", err)
+		switch name {
+		case "process_document":
+			rawDocID, ok := payload["document_id"]
+			if !ok {
+				return
+			}
+			rawUserID, ok := payload["user_id"]
+			if !ok {
+				return
+			}
+			docID, err := parseUUID(rawDocID)
+			if err != nil {
+				logger.Warn("invalid document id in queue payload", "error", err)
+				return
+			}
+			userID := parseUserID(rawUserID)
+			if userID == 0 {
+				return
+			}
+			if err := svc.ProcessDocument(ctx, docID, userID); err != nil {
+				logger.Warn("process_document failed", "error", err)
+			}
+		case "summarize_session":
+			rawSessionID, ok := payload["session_id"]
+			if !ok {
+				return
+			}
+			rawUserID, ok := payload["user_id"]
+			if !ok {
+				return
+			}
+			sessionID, err := parseUUID(rawSessionID)
+			if err != nil {
+				logger.Warn("invalid session id in summary job", "error", err)
+				return
+			}
+			userID := parseUserID(rawUserID)
+			if userID == 0 {
+				return
+			}
+			svc.SummarizeSession(ctx, userID, sessionID)
 		}
 	})
 	return svc

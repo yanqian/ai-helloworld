@@ -70,3 +70,40 @@ CREATE TABLE IF NOT EXISTS upload_query_logs (
 
 CREATE INDEX IF NOT EXISTS idx_upload_query_logs_session
     ON upload_query_logs (session_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS upload_qa_messages (
+    id          BIGSERIAL PRIMARY KEY,
+    session_id  UUID NOT NULL REFERENCES upload_qa_sessions(id) ON DELETE CASCADE,
+    user_id     BIGINT NOT NULL,
+    role        TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    content     TEXT NOT NULL,
+    token_count INT NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_upload_qa_messages_session_created
+    ON upload_qa_messages (session_id, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_upload_qa_messages_user_created
+    ON upload_qa_messages (user_id, created_at DESC);
+
+-- Long-term memories derived from Q&A turns or summaries.
+CREATE TABLE IF NOT EXISTS upload_qa_memories (
+    id          BIGSERIAL PRIMARY KEY,
+    session_id  UUID NOT NULL REFERENCES upload_qa_sessions(id) ON DELETE CASCADE,
+    user_id     BIGINT NOT NULL,
+    source      TEXT NOT NULL CHECK (source IN ('qa_turn', 'summary', 'manual')),
+    content     TEXT NOT NULL,
+    embedding   VECTOR(1536),
+    importance  SMALLINT NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, session_id, source, content)
+);
+
+CREATE INDEX IF NOT EXISTS idx_upload_qa_memories_user_created
+    ON upload_qa_memories (user_id, created_at DESC);
+
+-- Optional IVF_FLAT index for memory similarity search (adjust lists based on data size).
+-- CREATE INDEX IF NOT EXISTS idx_upload_qa_memories_embedding
+--     ON upload_qa_memories USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)
+--     WHERE embedding IS NOT NULL;

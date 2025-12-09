@@ -115,10 +115,13 @@ func (h *Handler) GetDocument(c *gin.Context) {
 }
 
 type askPayload struct {
-	Query       string   `json:"query"`
-	SessionID   *string  `json:"sessionId"`
-	DocumentIDs []string `json:"documentIds"`
-	TopK        int      `json:"topK"`
+	Query            string   `json:"query"`
+	SessionID        *string  `json:"sessionId"`
+	DocumentIDs      []string `json:"documentIds"`
+	TopK             int      `json:"topK"`
+	TopKMems         *int     `json:"topKMems"`
+	MaxHistoryTokens *int     `json:"maxHistoryTokens"`
+	IncludeHistory   *bool    `json:"includeHistory"`
 }
 
 // AskQuestion performs retrieval augmented question answering.
@@ -159,10 +162,13 @@ func (h *Handler) AskQuestion(c *gin.Context) {
 		docIDs = append(docIDs, parsed)
 	}
 	resp, err := h.uploadSvc.Ask(c.Request.Context(), claims.UserID, uploadask.AskRequest{
-		Query:       req.Query,
-		SessionID:   sessionID,
-		DocumentIDs: docIDs,
-		TopK:        req.TopK,
+		Query:            req.Query,
+		SessionID:        sessionID,
+		DocumentIDs:      docIDs,
+		TopK:             req.TopK,
+		TopKMems:         req.TopKMems,
+		MaxHistoryTokens: req.MaxHistoryTokens,
+		IncludeHistory:   req.IncludeHistory,
 	})
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -174,6 +180,9 @@ func (h *Handler) AskQuestion(c *gin.Context) {
 		case apperrors.IsCode(err, "unauthorized"):
 			status = http.StatusUnauthorized
 			code = "unauthorized"
+		case apperrors.IsCode(err, "not_found"):
+			status = http.StatusNotFound
+			code = "not_found"
 		}
 		abortWithError(c, NewHTTPError(status, code, errMessage(err), err))
 		return

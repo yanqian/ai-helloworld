@@ -83,3 +83,51 @@ type QueryLog struct {
 	Sources      []ChunkSource `json:"sources"`
 	CreatedAt    time.Time     `json:"createdAt"`
 }
+
+// MessageRole enumerates chat roles stored in upload_qa_messages.
+type MessageRole string
+
+const (
+	MessageRoleUser      MessageRole = "user"
+	MessageRoleAssistant MessageRole = "assistant"
+	MessageRoleSystem    MessageRole = "system"
+)
+
+// ConversationMessage captures a chat turn for an Upload & Ask session.
+type ConversationMessage struct {
+	ID         int64       `json:"id"`
+	SessionID  uuid.UUID   `json:"sessionId"`
+	UserID     int64       `json:"userId"`
+	Role       MessageRole `json:"role"`
+	Content    string      `json:"content"`
+	TokenCount int         `json:"tokenCount"`
+	CreatedAt  time.Time   `json:"createdAt"`
+}
+
+// MemorySource indicates how a memory was produced.
+type MemorySource string
+
+const (
+	MemorySourceQATurn  MemorySource = "qa_turn"
+	MemorySourceSummary MemorySource = "summary"
+	MemorySourceManual  MemorySource = "manual"
+)
+
+// MemoryRecord stores long-term conversational context.
+type MemoryRecord struct {
+	ID         int64        `json:"id"`
+	SessionID  uuid.UUID    `json:"sessionId"`
+	UserID     int64        `json:"userId"`
+	Source     MemorySource `json:"source"`
+	Content    string       `json:"content"`
+	Embedding  []float32    `json:"embedding,omitempty"`
+	Importance int16        `json:"importance"`
+	CreatedAt  time.Time    `json:"createdAt"`
+}
+
+// RetrievedMemory includes the memory and similarity score.
+type RetrievedMemory struct {
+	Memory    MemoryRecord `json:"memory"`
+	Score     float64      `json:"score"`
+	CreatedAt time.Time    `json:"createdAt"`
+}

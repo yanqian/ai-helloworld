@@ -82,13 +82,14 @@ type FAQConfig struct {
 
 // UploadAskConfig controls the upload-and-ask flow.
 type UploadAskConfig struct {
-	VectorDim       int                 `yaml:"vectorDim"`
-	MaxFileMB       int                 `yaml:"maxFileMb"`
-	MaxPreviewChars int                 `yaml:"maxPreviewChars"`
-	Storage         UploadStorageConfig `yaml:"storage"`
-	Redis           RedisConfig         `yaml:"redis"`
-	Postgres        PostgresConfig      `yaml:"postgres"`
-	Worker          UploadWorkerConfig  `yaml:"worker"`
+	VectorDim       int                   `yaml:"vectorDim"`
+	MaxFileMB       int                   `yaml:"maxFileMb"`
+	MaxPreviewChars int                   `yaml:"maxPreviewChars"`
+	Memory          UploadAskMemoryConfig `yaml:"memory"`
+	Storage         UploadStorageConfig   `yaml:"storage"`
+	Redis           RedisConfig           `yaml:"redis"`
+	Postgres        PostgresConfig        `yaml:"postgres"`
+	Worker          UploadWorkerConfig    `yaml:"worker"`
 }
 
 // UploadStorageConfig configures object storage for uploads.
@@ -103,6 +104,16 @@ type UploadStorageConfig struct {
 // UploadWorkerConfig toggles background processing.
 type UploadWorkerConfig struct {
 	Enabled bool `yaml:"enabled"`
+}
+
+// UploadAskMemoryConfig toggles conversational memory.
+type UploadAskMemoryConfig struct {
+	Enabled            bool `yaml:"enabled"`
+	TopKMems           int  `yaml:"topKMems"`
+	MaxHistoryTokens   int  `yaml:"maxHistoryTokens"`
+	MemoryVectorDim    int  `yaml:"memoryVectorDim"`
+	SummaryEveryNTurns int  `yaml:"summaryEveryNTurns"`
+	PruneLimit         int  `yaml:"pruneLimit"`
 }
 
 // AuthConfig controls authentication settings.
@@ -263,6 +274,34 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("UPLOADASK_MAX_PREVIEW_CHARS"); v != "" {
 		if parsed, err := strconv.Atoi(v); err == nil {
 			cfg.UploadAsk.MaxPreviewChars = parsed
+		}
+	}
+	if v := os.Getenv("UPLOADASK_MEMORY_ENABLED"); v != "" {
+		cfg.UploadAsk.Memory.Enabled = v == "1" || strings.EqualFold(v, "true")
+	}
+	if v := os.Getenv("UPLOADASK_MEMORY_TOPK_MEMS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.UploadAsk.Memory.TopKMems = parsed
+		}
+	}
+	if v := os.Getenv("UPLOADASK_MEMORY_MAX_HISTORY_TOKENS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.UploadAsk.Memory.MaxHistoryTokens = parsed
+		}
+	}
+	if v := os.Getenv("UPLOADASK_MEMORY_VECTOR_DIM"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.UploadAsk.Memory.MemoryVectorDim = parsed
+		}
+	}
+	if v := os.Getenv("UPLOADASK_MEMORY_SUMMARY_EVERY_N_TURNS"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.UploadAsk.Memory.SummaryEveryNTurns = parsed
+		}
+	}
+	if v := os.Getenv("UPLOADASK_MEMORY_PRUNE_LIMIT"); v != "" {
+		if parsed, err := strconv.Atoi(v); err == nil {
+			cfg.UploadAsk.Memory.PruneLimit = parsed
 		}
 	}
 	if v := os.Getenv("UPLOADASK_STORAGE_ENDPOINT"); v != "" {
@@ -426,7 +465,15 @@ func defaultConfig() *Config {
 			VectorDim:       1536,
 			MaxFileMB:       20,
 			MaxPreviewChars: 240,
-			Storage:         UploadStorageConfig{},
+			Memory: UploadAskMemoryConfig{
+				Enabled:            false,
+				TopKMems:           3,
+				MaxHistoryTokens:   800,
+				MemoryVectorDim:    1536,
+				SummaryEveryNTurns: 0,
+				PruneLimit:         200,
+			},
+			Storage: UploadStorageConfig{},
 			Redis: RedisConfig{
 				Enabled: false,
 				Addr:    "",
@@ -514,6 +561,20 @@ func (c *Config) Validate() error {
 	}
 	if c.UploadAsk.MaxPreviewChars < 0 {
 		return errors.New("uploadAsk.maxPreviewChars cannot be negative")
+	}
+	if c.UploadAsk.Memory.MaxHistoryTokens < 0 {
+		return errors.New("uploadAsk.memory.maxHistoryTokens cannot be negative")
+	}
+	if c.UploadAsk.Memory.PruneLimit < 0 {
+		return errors.New("uploadAsk.memory.pruneLimit cannot be negative")
+	}
+	if c.UploadAsk.Memory.Enabled {
+		if c.UploadAsk.Memory.TopKMems <= 0 {
+			return errors.New("uploadAsk.memory.topKMems must be positive when enabled")
+		}
+		if c.UploadAsk.Memory.MemoryVectorDim <= 0 {
+			return errors.New("uploadAsk.memory.memoryVectorDim must be positive when memory is enabled")
+		}
 	}
 	if c.UploadAsk.Redis.Enabled && strings.TrimSpace(c.UploadAsk.Redis.Addr) == "" {
 		return errors.New("uploadAsk.redis.addr cannot be empty when uploadAsk.redis is enabled")

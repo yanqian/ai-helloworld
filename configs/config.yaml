@@ -55,6 +55,13 @@ uploadAsk:
   vectorDim: 1536
   maxFileMb: 20
   maxPreviewChars: 512
+  memory:
+    enabled: false
+    topKMems: 3
+    maxHistoryTokens: 800
+    memoryVectorDim: 1536
+    summaryEveryNTurns: 0
+    pruneLimit: 200
   storage:
     endpoint: "https://ba25d2c1325108cb0a84ce55b2b8d10e.r2.cloudflarestorage.com" # set via R2_ENDPOINT or UPLOADASK_STORAGE_ENDPOINT
     accessKey: "" # set via R2_ACCESS_KEY

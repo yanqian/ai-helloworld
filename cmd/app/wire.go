@@ -40,6 +40,8 @@ func initializeApp() (*bootstrap.App, error) {
 		provideUploadChunkRepository,
 		provideUploadSessionRepository,
 		provideUploadQueryLogRepository,
+		provideUploadMessageLog,
+		provideUploadMemoryStore,
 		provideUploadQueue,
 		provideUploadLLM,
 		provideUploadService,
