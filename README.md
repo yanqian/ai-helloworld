@@ -137,6 +137,8 @@ All errors use:
 - **Re-run upload document processing** (Redis/Valkey queue only): push a job back onto the queue with the document and user IDs:
   `redis-cli -u "$UPLOADASK_REDIS_ADDR" LPUSH 'uploadask:jobs' '{"name":"process_document","payload":{"document_id":"<doc-uuid>","user_id":<user-id>}}'`
   If the document is marked `failed`, you can reset it first: `UPDATE upload_documents SET status='pending', failure_reason=NULL WHERE id='<doc-uuid>';`
+- **Trigger a chat summary** (Redis/Valkey queue): enqueue a `summarize_session` job to force a long-term memory summary for a session (memory must be enabled):
+  `redis-cli -u "$UPLOADASK_REDIS_ADDR" LPUSH 'uploadask:jobs' '{"name":"summarize_session","payload":{"session_id":"<session-uuid>","user_id":<user-id>}}'`
 
 ## Upload & Ask API (pgvector)
 
