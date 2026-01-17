@@ -12,7 +12,7 @@ Add Google OAuth 2.0 login and sign up to the helloworld project. This doc cover
 ## Non-Goals
 - Supporting other identity providers beyond Google.
 - Replacing existing email/password authentication; Google auth will co-exist with it.
-- Building advanced account management (e.g., MFA, recovery flows).
+- Building advanced account management (e.g., MFA, recovery flows); TODO for a later phase.
 
 ## Background / Context
 The app already supports email-based login/sign up. Adding Google OAuth improves onboarding and reduces password friction. Google OAuth 2.0 will be used for authorization, with minimal scopes for identity and profile data.
@@ -30,7 +30,7 @@ The app already supports email-based login/sign up. Adding Google OAuth improves
   - Establish a first-party session (cookie or token) independent from Google; use it for app auth.
 - Account mapping
   - Use Google `sub` (stable user ID) as provider identifier.
-  - If a user already exists with the same email and no provider link, link the Google identity after verifying the email.
+  - TODO (future phase): auto-link existing users by verified email.
 - Token handling
   - Store refresh tokens securely (encrypted at rest).
   - Rotate tokens when Google issues new ones; handle cases where refresh token is only returned on first consent.
@@ -38,12 +38,13 @@ The app already supports email-based login/sign up. Adding Google OAuth improves
 
 ## Data / API Changes
 - Database
-  - Add OAuth identity table or fields on users:
+  - Recommendation for current schema: add a `user_identities` table keyed by `user_id`, and keep `users` focused on email/password.
+  - Alternative (smaller change): add provider fields directly to `users`.
+  - Identity fields:
     - `provider` (e.g., "google")
     - `provider_subject` (Google `sub`)
     - `refresh_token` (encrypted)
     - `provider_email` (for auditing)
-  - Alternatively, a `user_identities` table for multi-provider support.
 - API
   - New auth endpoints listed above.
   - Optional: token refresh endpoint if session is derived from OAuth tokens.
@@ -54,6 +55,7 @@ The app already supports email-based login/sign up. Adding Google OAuth improves
 - Verify ID token signature, issuer, audience, and nonce where applicable.
 - Restrict scopes to `openid`, `email`, and `profile`.
 - Encrypt refresh tokens and restrict access in logs.
+- Store token encryption keys in app config.
 - Follow Google OAuth compliance for logout and user consent.
 
 ## Rollout Plan
@@ -67,6 +69,5 @@ The app already supports email-based login/sign up. Adding Google OAuth improves
 - Manual UI verification for login, redirect, and logout flows.
 
 ## Open Questions
-- Do we want to link Google accounts to existing users by email automatically or require confirmation?
-- Google does not provide a reliable server-side signal for \"user logged out of Google\"; do we accept a local logout-only model or require periodic re-auth?
-- Where should token encryption keys be stored (KMS vs app config)?
+- Account linking by email is deferred; if added later, auto-link verified emails.
+- Google does not provide a reliable server-side signal for \"user logged out of Google\"; local logout clears app session, while revoking refresh tokens prevents future refresh. Do we require periodic re-auth?
