@@ -7,7 +7,7 @@ Add Google OAuth 2.0 login and sign up to the helloworld project. This doc cover
 - Allow users to register or log in with a Google account.
 - Provide a Google OAuth entry point on the existing login page.
 - Support refresh tokens to keep sessions active.
-- Ensure logout from Google also clears the app session.
+- Provide best-effort logout alignment between Google and the app session.
 
 ## Non-Goals
 - Supporting other identity providers beyond Google.
