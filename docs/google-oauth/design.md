@@ -11,7 +11,7 @@ Add Google OAuth 2.0 login and sign up to the helloworld project. This doc cover
 
 ## Non-Goals
 - Supporting other identity providers beyond Google.
-- Replacing existing email/password authentication.
+- Replacing existing email/password authentication; Google auth will co-exist with it.
 - Building advanced account management (e.g., MFA, recovery flows).
 
 ## Background / Context
