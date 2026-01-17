@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strconv"
 	"testing"
 	"time"
 
@@ -80,12 +81,16 @@ func newTestLogger() *slog.Logger {
 }
 
 type memoryRepo struct {
-	users map[int64]User
-	seq   int64
+	users      map[int64]User
+	seq        int64
+	identities map[string]Identity
 }
 
 func newMemoryRepo() *memoryRepo {
-	return &memoryRepo{users: make(map[int64]User)}
+	return &memoryRepo{
+		users:      make(map[int64]User),
+		identities: make(map[string]Identity),
+	}
 }
 
 func (m *memoryRepo) Create(_ context.Context, email, nickname, passwordHash string) (User, error) {
@@ -113,4 +118,20 @@ func (m *memoryRepo) GetByEmail(_ context.Context, email string) (User, bool, er
 func (m *memoryRepo) GetByID(_ context.Context, id int64) (User, bool, error) {
 	user, ok := m.users[id]
 	return user, ok, nil
+}
+
+func (m *memoryRepo) GetIdentity(_ context.Context, provider, providerSubject string) (Identity, bool, error) {
+	identity, ok := m.identities[provider+":"+providerSubject]
+	return identity, ok, nil
+}
+
+func (m *memoryRepo) GetIdentityByUser(_ context.Context, userID int64, provider string) (Identity, bool, error) {
+	identity, ok := m.identities[provider+":"+strconv.FormatInt(userID, 10)]
+	return identity, ok, nil
+}
+
+func (m *memoryRepo) UpsertIdentity(_ context.Context, identity Identity) (Identity, error) {
+	m.identities[identity.Provider+":"+identity.ProviderSubject] = identity
+	m.identities[identity.Provider+":"+strconv.FormatInt(identity.UserID, 10)] = identity
+	return identity, nil
 }
