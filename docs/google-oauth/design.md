@@ -22,17 +22,19 @@ The app already supports email-based login/sign up. Adding Google OAuth improves
   - Add a "Continue with Google" button on the existing login/sign up page.
   - Redirect unauthenticated users to the login page when accessing protected content (current behavior remains).
 - Auth flow
-  - Implement OAuth 2.0 Authorization Code flow with PKCE (if supported) and state validation.
+  - Implement OAuth 2.0 Authorization Code flow with PKCE and state validation.
   - Define endpoints:
     - `GET /auth/google/login` -> redirects to Google's authorization page.
     - `GET /auth/google/callback` -> exchanges code for tokens, creates or links user, starts session.
-    - `POST /auth/logout` -> clears app session and initiates Google logout (front-end redirect or post-logout URL).
+    - `POST /auth/logout` -> clears app session and optionally revokes Google refresh token.
+  - Establish a first-party session (cookie or token) independent from Google; use it for app auth.
 - Account mapping
   - Use Google `sub` (stable user ID) as provider identifier.
   - If a user already exists with the same email and no provider link, link the Google identity after verifying the email.
 - Token handling
   - Store refresh tokens securely (encrypted at rest).
-  - Rotate tokens when Google issues new ones and revoke on logout.
+  - Rotate tokens when Google issues new ones; handle cases where refresh token is only returned on first consent.
+  - Revoke refresh tokens on app logout where possible.
 
 ## Data / API Changes
 - Database
@@ -48,7 +50,8 @@ The app already supports email-based login/sign up. Adding Google OAuth improves
 
 ## Security / Privacy
 - Use `state` to prevent CSRF and validate redirect URIs.
-- Use PKCE where applicable; no implicit flow.
+- Use PKCE; no implicit flow.
+- Verify ID token signature, issuer, audience, and nonce where applicable.
 - Restrict scopes to `openid`, `email`, and `profile`.
 - Encrypt refresh tokens and restrict access in logs.
 - Follow Google OAuth compliance for logout and user consent.
@@ -65,5 +68,5 @@ The app already supports email-based login/sign up. Adding Google OAuth improves
 
 ## Open Questions
 - Do we want to link Google accounts to existing users by email automatically or require confirmation?
-- Should logout revoke Google refresh tokens or just clear local session?
+- Google does not provide a reliable server-side signal for \"user logged out of Google\"; do we accept a local logout-only model or require periodic re-auth?
 - Where should token encryption keys be stored (KMS vs app config)?
