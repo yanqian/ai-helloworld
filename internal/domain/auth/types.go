@@ -7,6 +7,16 @@ type Config struct {
 	Secret          string
 	TokenTTL        time.Duration
 	RefreshTokenTTL time.Duration
+	Google          GoogleConfig
+}
+
+// GoogleConfig holds OAuth settings for Google sign-in.
+type GoogleConfig struct {
+	ClientID             string
+	ClientSecret         string
+	RedirectURL          string
+	TokenEncryptionKey   string
+	PostLoginRedirectURL string
 }
 
 // User represents a persisted account.
@@ -16,6 +26,18 @@ type User struct {
 	Nickname     string    `json:"nickname"`
 	PasswordHash string    `json:"-"`
 	CreatedAt    time.Time `json:"createdAt"`
+}
+
+// Identity represents an external auth provider linkage.
+type Identity struct {
+	ID              int64
+	UserID          int64
+	Provider        string
+	ProviderSubject string
+	ProviderEmail   string
+	RefreshToken    string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 // RegisterRequest captures the registration payload.

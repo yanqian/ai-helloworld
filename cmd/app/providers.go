@@ -67,6 +67,13 @@ func provideAuthConfig(cfg *config.Config) auth.Config {
 		Secret:          cfg.Auth.JWTSecret,
 		TokenTTL:        cfg.Auth.AccessTokenTTL,
 		RefreshTokenTTL: cfg.Auth.RefreshTokenTTL,
+		Google: auth.GoogleConfig{
+			ClientID:             cfg.Auth.Google.ClientID,
+			ClientSecret:         cfg.Auth.Google.ClientSecret,
+			RedirectURL:          cfg.Auth.Google.RedirectURL,
+			TokenEncryptionKey:   cfg.Auth.Google.TokenEncryptionKey,
+			PostLoginRedirectURL: cfg.Auth.Google.PostLoginRedirectURL,
+		},
 	}
 }
 

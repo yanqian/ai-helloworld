@@ -118,10 +118,20 @@ type UploadAskMemoryConfig struct {
 
 // AuthConfig controls authentication settings.
 type AuthConfig struct {
-	JWTSecret       string         `yaml:"jwtSecret"`
-	AccessTokenTTL  time.Duration  `yaml:"accessTokenTtl"`
-	RefreshTokenTTL time.Duration  `yaml:"refreshTokenTtl"`
-	Postgres        PostgresConfig `yaml:"postgres"`
+	JWTSecret       string           `yaml:"jwtSecret"`
+	AccessTokenTTL  time.Duration    `yaml:"accessTokenTtl"`
+	RefreshTokenTTL time.Duration    `yaml:"refreshTokenTtl"`
+	Postgres        PostgresConfig   `yaml:"postgres"`
+	Google          GoogleAuthConfig `yaml:"google"`
+}
+
+// GoogleAuthConfig holds Google OAuth settings.
+type GoogleAuthConfig struct {
+	ClientID             string `yaml:"clientId"`
+	ClientSecret         string `yaml:"clientSecret"`
+	RedirectURL          string `yaml:"redirectUrl"`
+	TokenEncryptionKey   string `yaml:"tokenEncryptionKey"`
+	PostLoginRedirectURL string `yaml:"postLoginRedirectUrl"`
 }
 
 // RedisConfig contains connection information for cache storage.
@@ -357,6 +367,21 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.Auth.RefreshTokenTTL = parsed
 		}
 	}
+	if v := os.Getenv("AUTH_GOOGLE_CLIENT_ID"); v != "" {
+		cfg.Auth.Google.ClientID = v
+	}
+	if v := os.Getenv("AUTH_GOOGLE_CLIENT_SECRET"); v != "" {
+		cfg.Auth.Google.ClientSecret = v
+	}
+	if v := os.Getenv("AUTH_GOOGLE_REDIRECT_URL"); v != "" {
+		cfg.Auth.Google.RedirectURL = v
+	}
+	if v := os.Getenv("AUTH_GOOGLE_TOKEN_KEY"); v != "" {
+		cfg.Auth.Google.TokenEncryptionKey = v
+	}
+	if v := os.Getenv("AUTH_GOOGLE_POST_LOGIN_REDIRECT"); v != "" {
+		cfg.Auth.Google.PostLoginRedirectURL = v
+	}
 	if v := os.Getenv("AUTH_POSTGRES_DSN"); v != "" {
 		cfg.Auth.Postgres.DSN = v
 	}
@@ -460,6 +485,7 @@ func defaultConfig() *Config {
 				MaxConns: 5,
 				MinConns: 1,
 			},
+			Google: GoogleAuthConfig{},
 		},
 		UploadAsk: UploadAskConfig{
 			VectorDim:       1536,
@@ -553,6 +579,21 @@ func (c *Config) Validate() error {
 	if c.Auth.RefreshTokenTTL <= 0 {
 		return errors.New("auth.refreshTokenTtl must be positive")
 	}
+	if googleConfigEnabled(c.Auth.Google) {
+		if strings.TrimSpace(c.Auth.Google.ClientID) == "" {
+			return errors.New("auth.google.clientId cannot be empty when google auth is enabled")
+		}
+		if strings.TrimSpace(c.Auth.Google.ClientSecret) == "" {
+			return errors.New("auth.google.clientSecret cannot be empty when google auth is enabled")
+		}
+		if strings.TrimSpace(c.Auth.Google.RedirectURL) == "" {
+			return errors.New("auth.google.redirectUrl cannot be empty when google auth is enabled")
+		}
+		keyLen := len(c.Auth.Google.TokenEncryptionKey)
+		if keyLen != 16 && keyLen != 24 && keyLen != 32 {
+			return errors.New("auth.google.tokenEncryptionKey must be 16, 24, or 32 bytes")
+		}
+	}
 	if c.UploadAsk.VectorDim <= 0 {
 		return errors.New("uploadAsk.vectorDim must be positive")
 	}
@@ -592,4 +633,12 @@ func splitAndTrim(raw string) []string {
 		}
 	}
 	return result
+}
+
+func googleConfigEnabled(cfg GoogleAuthConfig) bool {
+	return strings.TrimSpace(cfg.ClientID) != "" ||
+		strings.TrimSpace(cfg.ClientSecret) != "" ||
+		strings.TrimSpace(cfg.RedirectURL) != "" ||
+		strings.TrimSpace(cfg.TokenEncryptionKey) != "" ||
+		strings.TrimSpace(cfg.PostLoginRedirectURL) != ""
 }

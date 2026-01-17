@@ -511,11 +511,14 @@ func (s *stubFAQ) Trending(ctx context.Context) ([]faq.TrendingQuery, error) {
 }
 
 type stubAuth struct {
-	registerFn func(ctx context.Context, req auth.RegisterRequest) (auth.UserView, error)
-	loginFn    func(ctx context.Context, req auth.LoginRequest) (auth.LoginResponse, error)
-	refreshFn  func(ctx context.Context, token string) (auth.LoginResponse, error)
-	validateFn func(ctx context.Context, token string) (auth.Claims, error)
-	profileFn  func(ctx context.Context, userID int64) (auth.UserView, error)
+	registerFn   func(ctx context.Context, req auth.RegisterRequest) (auth.UserView, error)
+	loginFn      func(ctx context.Context, req auth.LoginRequest) (auth.LoginResponse, error)
+	googleAuthFn func(ctx context.Context, state, codeChallenge string) (string, error)
+	googleCBFn   func(ctx context.Context, code, codeVerifier string) (auth.LoginResponse, error)
+	refreshFn    func(ctx context.Context, token string) (auth.LoginResponse, error)
+	validateFn   func(ctx context.Context, token string) (auth.Claims, error)
+	profileFn    func(ctx context.Context, userID int64) (auth.UserView, error)
+	logoutFn     func(ctx context.Context, userID int64) error
 }
 
 func (s *stubAuth) Register(ctx context.Context, req auth.RegisterRequest) (auth.UserView, error) {
@@ -528,6 +531,20 @@ func (s *stubAuth) Register(ctx context.Context, req auth.RegisterRequest) (auth
 func (s *stubAuth) Login(ctx context.Context, req auth.LoginRequest) (auth.LoginResponse, error) {
 	if s.loginFn != nil {
 		return s.loginFn(ctx, req)
+	}
+	return auth.LoginResponse{}, nil
+}
+
+func (s *stubAuth) GoogleAuthURL(ctx context.Context, state, codeChallenge string) (string, error) {
+	if s.googleAuthFn != nil {
+		return s.googleAuthFn(ctx, state, codeChallenge)
+	}
+	return "", nil
+}
+
+func (s *stubAuth) GoogleCallback(ctx context.Context, code, codeVerifier string) (auth.LoginResponse, error) {
+	if s.googleCBFn != nil {
+		return s.googleCBFn(ctx, code, codeVerifier)
 	}
 	return auth.LoginResponse{}, nil
 }
@@ -551,6 +568,13 @@ func (s *stubAuth) Profile(ctx context.Context, userID int64) (auth.UserView, er
 		return s.profileFn(ctx, userID)
 	}
 	return auth.UserView{}, nil
+}
+
+func (s *stubAuth) Logout(ctx context.Context, userID int64) error {
+	if s.logoutFn != nil {
+		return s.logoutFn(ctx, userID)
+	}
+	return nil
 }
 
 func decodeErrorBody(t *testing.T, raw []byte) map[string]map[string]string {
