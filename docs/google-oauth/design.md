@@ -70,4 +70,4 @@ The app already supports email-based login/sign up. Adding Google OAuth improves
 
 ## Open Questions
 - Account linking by email is deferred; if added later, auto-link verified emails.
-- Google does not provide a reliable server-side signal for \"user logged out of Google\"; local logout clears app session, while revoking refresh tokens prevents future refresh. Do we require periodic re-auth?
+- Logout/connection health approach: use short-lived access tokens and refresh on demand; if refresh fails, prompt re-auth immediately. Consider an optional periodic connection health check instead of forcing periodic re-auth.
