@@ -90,6 +90,69 @@ func (h *Handler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// GoogleLogin redirects the user to Google's OAuth consent screen.
+func (h *Handler) GoogleLogin(c *gin.Context) {
+	state, codeVerifier, codeChallenge, err := auth.NewOAuthState()
+	if err != nil {
+		abortWithError(c, NewHTTPError(http.StatusInternalServerError, "auth_failed", "failed to start oauth flow", err))
+		return
+	}
+	url, err := h.authSvc.GoogleAuthURL(c.Request.Context(), state, codeChallenge)
+	if err != nil {
+		status := http.StatusInternalServerError
+		code := "auth_failed"
+		if apperrors.IsCode(err, "auth_not_configured") {
+			status = http.StatusNotImplemented
+			code = "auth_not_configured"
+		}
+		abortWithError(c, NewHTTPError(status, code, errMessage(err), err))
+		return
+	}
+	setOAuthStateCookie(c, state, codeVerifier)
+	c.Redirect(http.StatusFound, url)
+}
+
+// GoogleCallback handles the OAuth callback and issues JWTs.
+func (h *Handler) GoogleCallback(c *gin.Context) {
+	code := c.Query("code")
+	state := c.Query("state")
+	payload, ok := readOAuthStateCookie(c)
+	if !ok || state == "" || payload.State != state {
+		clearOAuthStateCookie(c)
+		abortWithError(c, NewHTTPError(http.StatusBadRequest, "invalid_state", "invalid oauth state", nil))
+		return
+	}
+	clearOAuthStateCookie(c)
+	resp, err := h.authSvc.GoogleCallback(c.Request.Context(), code, payload.CodeVerifier)
+	if err != nil {
+		status := http.StatusInternalServerError
+		code := "auth_failed"
+		switch {
+		case apperrors.IsCode(err, "invalid_request"):
+			status = http.StatusBadRequest
+			code = "invalid_request"
+		case apperrors.IsCode(err, "oauth_exchange_failed"):
+			status = http.StatusUnauthorized
+			code = "oauth_exchange_failed"
+		case apperrors.IsCode(err, "invalid_credentials"):
+			status = http.StatusUnauthorized
+			code = "invalid_credentials"
+		case apperrors.IsCode(err, "invalid_token"):
+			status = http.StatusUnauthorized
+			code = "invalid_token"
+		case apperrors.IsCode(err, "account_linking_disabled"):
+			status = http.StatusConflict
+			code = "account_linking_disabled"
+		case apperrors.IsCode(err, "auth_not_configured"):
+			status = http.StatusNotImplemented
+			code = "auth_not_configured"
+		}
+		abortWithError(c, NewHTTPError(status, code, errMessage(err), err))
+		return
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 // Refresh exchanges a refresh token for a new access token.
 func (h *Handler) Refresh(c *gin.Context) {
 	var req auth.RefreshRequest
@@ -137,6 +200,20 @@ func (h *Handler) Profile(c *gin.Context) {
 		"message": "Welcome to the private dashboard",
 		"user":    user,
 	})
+}
+
+// Logout clears the app session and revokes Google refresh tokens when available.
+func (h *Handler) Logout(c *gin.Context) {
+	claims, ok := getClaims(c)
+	if !ok {
+		abortWithError(c, NewHTTPError(http.StatusUnauthorized, "unauthorized", "missing token", nil))
+		return
+	}
+	if err := h.authSvc.Logout(c.Request.Context(), claims.UserID); err != nil {
+		abortWithError(c, NewHTTPError(http.StatusInternalServerError, "auth_failed", errMessage(err), err))
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // Summarize handles the sync summarization endpoint.

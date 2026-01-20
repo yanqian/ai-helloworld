@@ -10,6 +10,20 @@ CREATE TABLE IF NOT EXISTS users (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Link external identity providers (e.g., Google OAuth).
+CREATE TABLE IF NOT EXISTS user_identities (
+    id               BIGSERIAL PRIMARY KEY,
+    user_id          BIGINT     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider         TEXT       NOT NULL,
+    provider_subject TEXT       NOT NULL,
+    provider_email   TEXT       NOT NULL,
+    refresh_token    TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (provider, provider_subject),
+    UNIQUE (user_id, provider)
+);
+
 -- Persist FAQ questions and their embeddings.
 CREATE TABLE IF NOT EXISTS questions (
     id             BIGSERIAL PRIMARY KEY,

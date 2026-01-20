@@ -51,6 +51,12 @@ auth:
     dsn: "" # set via AUTH_POSTGRES_DSN in production
     maxConns: 5
     minConns: 1
+  google:
+    clientId: "" # set via AUTH_GOOGLE_CLIENT_ID
+    clientSecret: "" # set via AUTH_GOOGLE_CLIENT_SECRET
+    redirectUrl: "" # set via AUTH_GOOGLE_REDIRECT_URL
+    tokenEncryptionKey: "" # set via AUTH_GOOGLE_TOKEN_KEY (16/24/32 bytes)
+    postLoginRedirectUrl: "" # optional redirect after OAuth callback
 uploadAsk:
   vectorDim: 1536
   maxFileMb: 20

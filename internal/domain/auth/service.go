@@ -23,9 +23,12 @@ import (
 type Service interface {
 	Register(ctx context.Context, req RegisterRequest) (UserView, error)
 	Login(ctx context.Context, req LoginRequest) (LoginResponse, error)
+	GoogleAuthURL(ctx context.Context, state, codeChallenge string) (string, error)
+	GoogleCallback(ctx context.Context, code, codeVerifier string) (LoginResponse, error)
 	ValidateToken(ctx context.Context, token string) (Claims, error)
 	Refresh(ctx context.Context, refreshToken string) (LoginResponse, error)
 	Profile(ctx context.Context, userID int64) (UserView, error)
+	Logout(ctx context.Context, userID int64) error
 }
 
 type service struct {

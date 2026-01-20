@@ -30,11 +30,14 @@ func NewRouter(cfg *config.Config, handler *Handler) *http.Server {
 			authRoutes.POST("/register", handler.Register)
 			authRoutes.POST("/login", handler.Login)
 			authRoutes.POST("/refresh", handler.Refresh)
+			authRoutes.GET("/google/login", handler.GoogleLogin)
+			authRoutes.GET("/google/callback", handler.GoogleCallback)
 		}
 
 		protected := api.Group("/")
 		protected.Use(authMiddleware(handler.authSvc))
 		{
+			protected.POST("/auth/logout", handler.Logout)
 			protected.POST("/summaries", handler.Summarize)
 			protected.POST("/summaries/stream", handler.SummarizeStream)
 			protected.POST("/uv-advice", handler.RecommendProtection)
