@@ -1,0 +1,584 @@
+{
+  "features": [
+    {
+      "id": "F001",
+      "title": "Bootstrap minimal AI agent harness template",
+      "description": "Create the harness state files, schema, prompts, validation scripts, and tiny example needed to prove the template works end to end.",
+      "acceptance": [
+        "./init.sh validates required files and feature_list.json",
+        "scripts/validate-feature.sh F001 validates the selected feature",
+        "scripts/summarize-progress.sh prints feature totals and next work",
+        "examples/tiny-cli test coverage passes without third-party dependencies"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F002",
+      "title": "Add vendor-neutral lightweight orchestrator",
+      "description": "Add a generic orchestrator that follows the startup protocol, selects one unfinished feature, previews or runs Coding Agent and Evaluator Agent prompts, supports eval-only mode, and keeps vendor-specific agent execution configurable.",
+      "acceptance": [
+        "orchestrator.py exists at the template root",
+        "python3 orchestrator.py --dry-run runs the startup protocol and exits successfully when there is no unfinished feature",
+        "python3 orchestrator.py --eval-only F001 --dry-run previews the evaluator prompt",
+        "./init.sh validates orchestrator.py syntax",
+        "README.md and SPEC.md document the orchestrator boundary"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F003",
+      "title": "Adopt practiced AGENTS guardrails",
+      "description": "Refine the template AGENTS.md using proven guardrails from the production agent workflow, including initializer responsibilities, state safety rules, external behavior verification, external tool schema rules, work rules, anti-patterns, and recoverability goals.",
+      "acceptance": [
+        "AGENTS.md includes an Initializer role for bootstrapping repository state",
+        "AGENTS.md includes state safety rules for preserving feature_list.json fields and ordering",
+        "AGENTS.md includes external behavior verification rules for CLI, API, runtime, and structured tool output assumptions",
+        "AGENTS.md includes anti-patterns that prevent premature completion and chat-history reliance",
+        "./init.sh passes after the guardrail update"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F004",
+      "title": "Add testing layers to the harness template",
+      "description": "Add an explicit test plan and dependency-free unit, contract, and smoke test layers to the template, wire them into ./init.sh, and document how downstream projects should extend the layers.",
+      "acceptance": [
+        "test_plan.md documents the verification entry point and unit, contract, harness, and smoke layers",
+        "test/unit contains tests for validation and progress helper behavior",
+        "test/contract contains tests that lock AGENTS, feature schema, prompts, and orchestrator contracts",
+        "test/smoke contains an end-to-end smoke test for the template commands",
+        "./init.sh runs unit, contract, smoke, and optional harness tests"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F005",
+      "title": "Strengthen contract tests for AI harness obligations",
+      "description": "Refine contract tests so they verify AI agent obligations and harness boundaries, including external behavior verification, feature state preservation, prompt restrictions, evaluator anti-premature-completion rules, and orchestrator state-transition contracts.",
+      "acceptance": [
+        "Contract tests verify AGENTS external behavior verification requirements beyond section presence",
+        "Contract tests verify feature state fields, uniqueness, done/pass consistency, and unknown-field preservation requirements",
+        "Contract tests verify work, continue, and evaluate prompts constrain AI behavior and state mutation",
+        "Contract tests verify orchestrator state-transition and eval-only boundaries by static inspection",
+        "./init.sh passes after strengthening contract coverage"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F006",
+      "title": "Replace generic agent command with role adapters",
+      "description": "Remove the generic HARNESS_AGENT_COMMAND orchestration hook and make orchestrator.py dispatch explicit Coding Agent and Evaluator Agent role adapters instead.",
+      "acceptance": [
+        "orchestrator.py no longer references HARNESS_AGENT_COMMAND",
+        "orchestrator.py dispatches scripts/run-coding-agent.sh for Coding Agent prompts",
+        "orchestrator.py dispatches scripts/run-evaluator-agent.sh for Evaluator Agent prompts",
+        "README.md, SPEC.md, and AGENTS.md document role adapters instead of a generic agent command",
+        "./init.sh passes after the adapter boundary change"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F007",
+      "title": "Add repository knowledge map, quality rubric, and run artifacts",
+      "description": "Add a docs knowledge map, evaluator quality rubric, and run artifact mechanism so the harness captures repository-local knowledge, evaluator criteria, and per-run evidence without bloating AGENTS.md or progress.md.",
+      "acceptance": [
+        "docs/README.md indexes architecture, testing, external behavior, workflow, and decision-log documents",
+        "QUALITY.md defines evaluator rubric criteria and pass/fail guidance",
+        "runs/ contains a run log template and scripts/summarize-runs.sh summarizes recorded runs",
+        "AGENTS.md points agents to docs/ and QUALITY.md instead of becoming the only knowledge source",
+        "Evaluator prompt requires applying QUALITY.md and recording run evidence when appropriate",
+        "./init.sh validates the new knowledge, quality, and run artifact files"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F008",
+      "title": "Add failure-domain to harness-improvement loop",
+      "description": "Add a mechanism that classifies failures by domain and forces failed or blocked run records to assess whether the harness itself needs improvement through docs, prompts, scripts, schemas, tests, or follow-up features.",
+      "acceptance": [
+        "docs/failure-domains.md defines failure domains and the improvement loop",
+        "runs/RUN_TEMPLATE.md includes Failure Analysis fields for failure domain, summary, harness improvement, and follow-up feature",
+        "scripts/check-failure-domains.sh fails when failed run records omit domain or harness improvement assessment",
+        "orchestrator.py writes a failed run record when unattended coding or evaluation fails",
+        "AGENTS.md and prompts require agents to classify failures and turn harness weaknesses into durable improvements",
+        "./init.sh runs the failure-domain check",
+        "Contract, unit, and smoke tests cover the failure-domain mechanism"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F009",
+      "title": "Add Go server example",
+      "description": "Add a dependency-free Go HTTP server example that demonstrates how the harness can validate service-style projects with standard library tests.",
+      "acceptance": [
+        "examples/go-server contains a Go module with a small HTTP server",
+        "The server exposes GET /healthz and GET /greet?name=Codex endpoints",
+        "The Go server example has tests covering health, greeting, blank-name defaulting, and method rejection",
+        "./init.sh verifies the Go server example with go test ./... when Go is installed",
+        "README.md documents how to test and run the Go server example"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1"
+    },
+    {
+      "id": "F010",
+      "title": "Add Makefile and GitHub Actions CI",
+      "description": "Add a Makefile that standardizes local harness commands and a GitHub Actions workflow that runs the same CI verification path on push and pull request.",
+      "acceptance": [
+        "Makefile defines init, test, validate, unit, contract, smoke, go-example, dry-run, summarize, and ci targets",
+        "make ci runs ./init.sh, feature validation, and orchestrator dry-run",
+        ".github/workflows/ci.yml runs make ci on push, pull_request, and workflow_dispatch",
+        "README.md documents Makefile usage",
+        "./init.sh validates the Makefile and GitHub Actions workflow are present"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1"
+    },
+    {
+      "id": "F011",
+      "title": "Explore concurrent agent execution",
+      "description": "If future workflows need higher throughput, explore a bounded concurrent-agent mode that can run independent Coding Agent or Evaluator Agent work without violating feature state safety, run evidence, or evaluator gating.",
+      "acceptance": [
+        "Concurrency design defines which feature states may run in parallel and which must remain serialized",
+        "Orchestrator concurrency preserves one-writer semantics for feature_list.json and progress.md",
+        "Run records make concurrent work attributable to a feature, agent role, and attempt",
+        "Evaluator gating remains per feature and cannot be bypassed by concurrent execution",
+        "Tests cover race-prone state transitions before concurrent mode is enabled"
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P2"
+    },
+    {
+      "id": "F012",
+      "title": "Improve README positioning and onboarding",
+      "description": "Rewrite the README first screen and quick start so new users understand the project as a repository-level harness for resumable AI coding rather than a prompt collection.",
+      "acceptance": [
+        "README opens with Make AI coding projects resumable",
+        "README explains the concrete failure modes: interrupted sessions, long context, quota exhaustion, forgotten decisions, unrelated edits, and premature completion",
+        "README states that the project is not a prompt collection",
+        "README separates Use This Template from Verify This Repository",
+        "README explains that the orchestrator is intentionally boring and only enforces workflow boundaries",
+        "Contract tests lock the README positioning and onboarding language"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F013",
+      "title": "Add OSS readiness files and repository metadata",
+      "description": "Add public OSS readiness files and repository metadata so the project is easier to discover, evaluate, contribute to, and maintain.",
+      "acceptance": [
+        "LICENSE, CONTRIBUTING.md, SECURITY.md, and CHANGELOG.md are present",
+        "GitHub issue templates exist for bug reports and feature requests",
+        "./init.sh validates the OSS readiness files are present",
+        "Contract tests verify OSS readiness files and issue templates",
+        "GitHub repository description and topics are set for discoverability"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F014",
+      "title": "Add clean-state reset command",
+      "description": "Add a make clean workflow that resets project-specific harness state after copying the template into a new project while preserving the harness files, docs, scripts, tests, examples, and run template.",
+      "acceptance": [
+        "Makefile defines a clean target that calls scripts/clean-state.py",
+        "scripts/clean-state.py resets feature_list.json to an empty features array",
+        "scripts/clean-state.py resets progress.md to a fresh-project state",
+        "scripts/clean-state.py removes recorded run artifacts while preserving runs/RUN_TEMPLATE.md and runs/.gitkeep",
+        "README.md documents running make clean after copying the template",
+        "./init.sh validates scripts/clean-state.py is present",
+        "Unit and contract tests cover clean-state reset behavior"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F015",
+      "title": "Document real-world usage references",
+      "description": "Document the real projects that informed the harness design and link them from README and the repository knowledge map without copying full project code into examples.",
+      "acceptance": [
+        "docs/real-world-usage.md links home-guard-tg and agent-remote-tg",
+        "docs/real-world-usage.md explains the harness lessons extracted from those projects",
+        "README.md links docs/real-world-usage.md and both real project repositories",
+        "docs/README.md indexes real-world-usage.md",
+        "./init.sh validates docs/real-world-usage.md is present",
+        "Contract tests cover real-world usage references"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F016",
+      "title": "Link announcement article from README",
+      "description": "Link the public announcement article from README so visitors can understand the story and motivation behind the harness.",
+      "acceptance": [
+        "README.md includes an Announcement section near the top",
+        "README.md links the public announcement article",
+        "Contract tests verify the announcement link remains present"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F017",
+      "title": "Add AI Agent Harness skill",
+      "description": "Add a distributable skill that helps users initialize or repair the harness in a project, follow planning, one-feature implementation, evaluation, and explicit finalize-and-commit workflows while preserving repository files as the durable source of state.",
+      "acceptance": [
+        "skills/ai-agent-harness/SKILL.md defines the skill trigger and keeps repository state as the durable source of truth",
+        "The skill includes a deterministic initializer that supports new, adopt, repair, and check modes without overwriting conflicting project files by default",
+        "The skill documents planning, one-feature work, evaluator verification, and explicit finalize-and-commit workflows",
+        "The finalize-and-commit workflow requires explicit user satisfaction before staging or committing",
+        "README.md and SPEC.md document the skill as a convenience layer that preserves the vendor-neutral harness protocol",
+        "./init.sh validates the skill files and tests cover the skill contract"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F018",
+      "title": "Strengthen harness skill initializer tests and manifest semantics",
+      "description": "Strengthen the AI Agent Harness skill initializer so new, adopt, repair, and check modes are tested against realistic project boundaries, check output distinguishes normal project drift from conflicts, and installed projects record manifest metadata for future version drift handling.",
+      "acceptance": [
+        "Tests cover new, adopt, repair, and check modes for the skill initializer",
+        "Tests verify existing project files are not overwritten by default and force overwrite remains explicit",
+        "Tests verify repair mode restores missing harness-owned files while preserving project-owned state",
+        "Check mode reports missing files, conflicts, drift, installed version, template version, state validity, and next action guidance",
+        "The initializer records template and installation manifests that classify files as harness-owned static, project-owned state, merge-sensitive, or optional integration",
+        "A newly initialized project is verified as a runnable harness by semantic validation and the harness verification entry point, not only by file existence",
+        "README.md and SPEC.md document manifest-based drift handling and the stronger installed-harness definition",
+        "./init.sh passes with the expanded initializer tests"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F019",
+      "title": "Clarify installed skill usage in README",
+      "description": "Clarify the README and skill documentation so users understand the difference between installing and invoking the AI Agent Harness skill, using the repository checkout's Python helper manually, and using the workflow pack from other agent tools.",
+      "acceptance": [
+        "README.md has a skill installation section that explains installing `skills/ai-agent-harness/` into a skill directory and restarting the agent surface when applicable",
+        "README.md shows an installed-skill invocation such as `Use $ai-agent-harness to initialize this project`",
+        "README.md separates installed skill usage from manual `python3 skills/ai-agent-harness/scripts/init_harness.py` fallback usage",
+        "README.md explains that manual Python commands are for repository checkout or vendor-neutral fallback usage, not the primary installed-skill experience",
+        "SKILL.md and workflow references remain consistent with the installed-skill and manual-script distinction",
+        "Contract tests verify the clarified README and skill documentation",
+        "./init.sh passes after the documentation update"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F020",
+      "title": "Document portable cross-agent skill installation",
+      "description": "Update skill installation documentation to remove machine-specific absolute paths and describe portable Codex, Claude Code, Cursor, and manual fallback entry points.",
+      "acceptance": [
+        "README.md uses `~` or project-relative paths instead of machine-specific absolute paths for skill installation examples",
+        "README.md documents Codex installation with `~/.codex/skills` and the Codex skill installer helper",
+        "README.md documents Claude Code installation using personal `~/.claude/skills/ai-agent-harness/` and project `.claude/skills/ai-agent-harness/` skill locations",
+        "README.md documents Cursor usage through project rules under `.cursor/rules` and notes the manual initializer script remains the portable fallback",
+        "SKILL.md and workflow references avoid machine-specific absolute paths and remain consistent with the cross-agent entry points",
+        "Contract tests verify the portable paths and cross-agent documentation",
+        "./init.sh passes after the documentation update"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F021",
+      "title": "Add capability gap governance",
+      "description": "Strengthen the harness and distributable skill so agents must turn missing tools, permissions, generators, dependencies, services, credentials, runtime settings, CI resources, and verification fixtures into durable project capabilities or tracked blocked/follow-up work instead of bypassing them with local-only workarounds.",
+      "acceptance": [
+        "AGENTS.md defines capability gap handling and forbids bypassing required missing capabilities with hand-written generated artifacts, weakened scope, skipped verification, or local-only environment changes",
+        "docs/capability-gaps.md documents the required response, workaround rules, examples, and evaluator expectations for missing capabilities",
+        "Planning, coding, continuation, and evaluation prompts require agents to identify, record, and resolve capability gaps durably or track them as blocked/follow-up work",
+        "QUALITY.md and docs/failure-domains.md include capability-gap evaluation and failure classification",
+        "The skill initializer and template manifest include the capability-gap documentation so newly initialized projects receive the rule",
+        "Contract tests verify the capability-gap governance remains present",
+        "./init.sh passes after the update"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F022",
+      "title": "Add default example boundaries",
+      "description": "Strengthen the harness and distributable skill so agents treat default examples as demonstration fixtures instead of implementing project-level requirements inside examples/tiny-cli, examples/go-server, or other example paths.",
+      "acceptance": [
+        "AGENTS.md defines example boundaries and forbids satisfying project-level requirements by repurposing default examples unless the selected feature explicitly targets examples",
+        "docs/example-boundaries.md documents that examples are harness demonstrations, gives project-owned path guidance, and includes protobuf/gRPC-style project work as a non-example implementation case",
+        "Planning, coding, continuation, and evaluation prompts require agents to identify project-owned implementation paths and reject project work implemented only in examples",
+        "QUALITY.md and docs/failure-domains.md include example-boundary evaluation and failure classification",
+        "README.md clarifies that default examples may be removed or replaced during setup but should not become the product implementation surface",
+        "The skill initializer and bundled template include the example-boundary documentation so newly initialized projects receive the rule",
+        "Contract tests verify the example-boundary governance remains present",
+        "./init.sh passes after the update"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F023",
+      "title": "Add hidden harness installation layout",
+      "description": "Add installation layout profiles so user projects can keep root-level business code visible while storing harness state, prompts, docs, scripts, tests, runs, schemas, and examples under .agent-harness by default, with visible layout retained for template maintenance.",
+      "acceptance": [
+        "The skill initializer accepts `--layout hidden` and `--layout visible`, defaults new installs to hidden, and records the selected layout in `.agent-harness/manifest.json`",
+        "Hidden layout creates thin root `AGENTS.md` and `init.sh` entry points while storing the harness body under `.agent-harness/`",
+        "Hidden layout `./init.sh`, check, repair, and quick semantic validation succeed without root-level `feature_list.json`, `progress.md`, `prompts/`, `runs/`, `scripts/`, or harness tests",
+        "Visible layout remains available for harness development and preserves the existing root-level template shape",
+        "README.md, SPEC.md, SKILL.md, and workflow references document layout profiles and the hidden default",
+        "Contract and harness tests verify hidden layout, visible layout, manifest layout metadata, and version drift diagnostics",
+        "The bundled skill template is synchronized with the layout-profile implementation",
+        "./init.sh passes after the update"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F024",
+      "title": "Add feature decomposition governance",
+      "description": "Strengthen Planning Agent, Evaluator Agent, and skill guidance so broad user requirements are decomposed into independently verifiable feature entries instead of being collapsed into one over-bundled feature.",
+      "acceptance": [
+        "AGENTS.md requires Planning Agents to decompose broad requirements and forbids collapsing unrelated or independently verifiable work into one feature",
+        "docs/feature-decomposition.md defines split triggers, allowed merges, required planning output, and evaluator expectations",
+        "Planning and evaluation prompts require use of docs/feature-decomposition.md and reject generic all-requirements or over-bundled features",
+        "QUALITY.md and docs/failure-domains.md include feature-decomposition evaluation and failure classification",
+        "README.md, SPEC.md, docs/agent-workflow.md, SKILL.md, and workflow references document the decomposition rule",
+        "The skill initializer and bundled template include the feature-decomposition documentation so newly initialized projects receive the rule",
+        "Contract tests verify the feature-decomposition governance remains present",
+        "./init.sh passes after the update"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F025",
+      "title": "Add feature-linked commit message rules",
+      "description": "Require approved feature commits to include their feature ID in a predictable commit subject format so git history can be correlated with feature_list.json for analysis and harness improvement.",
+      "acceptance": [
+        "docs/commit-messages.md defines the feature commit subject format, batch feature handling, non-feature commit handling, and finalize checklist",
+        "AGENTS.md and the skill finalize-and-commit workflow require commit subjects to include approved feature IDs",
+        "README.md, SPEC.md, QUALITY.md, and docs/agent-workflow.md document feature-linked commit traceability",
+        "The skill initializer and bundled template include docs/commit-messages.md so newly initialized projects receive the rule",
+        "Contract tests verify commit-message governance remains present",
+        "./init.sh passes after the update"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F026",
+      "title": "Preserve executable script modes during installation",
+      "description": "Fix the skill initializer so hidden and visible harness installs make required shell entrypoints executable even when the installed skill template lost executable bits during download or extraction.",
+      "acceptance": [
+        "The initializer defines required executable harness paths and chmods them after copying or generating files",
+        "Hidden layout installs produce executable root `init.sh`, `.agent-harness/init.sh`, and `.agent-harness/scripts/*.sh` entrypoints",
+        "Semantic validation checks all required shell entrypoints for executable bits instead of only a subset",
+        "Harness tests simulate a template source with non-executable shell scripts and verify the installed harness is runnable",
+        "The bundled skill template is synchronized with the executable-bit fix",
+        "Contract tests verify the initializer keeps executable-bit handling logic",
+        "./init.sh passes after the update"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F027",
+      "title": "Separate harness verification from project recovery init",
+      "description": "Strengthen the harness initialization flow so installed projects distinguish the internal harness health check from the root project recovery entry point, and require root init.sh to become a real dependency install, service startup, and smoke-test contract once a minspec is accepted.",
+      "acceptance": [
+        "AGENTS.md and docs define `.agent-harness/scripts/init.sh` as harness verification and root `./init.sh` as the project recovery entry point",
+        "Initialization guidance states that before a minspec exists, root `./init.sh` may only verify the harness and must not claim project business behavior is runnable",
+        "Planning guidance requires the first post-minspec project feature to create or adapt a runnable skeleton and update root `./init.sh` to install dependencies, start required services, and run a real smoke test",
+        "Project recovery init requirements include clear logs, idempotency, no manual steps, no assumption that services are already running, and non-zero exit on failure",
+        "README.md, SPEC.md, SKILL.md, workflow references, and bundled template files stay consistent for hidden and visible layouts",
+        "Contract and harness tests verify the project recovery init governance remains present",
+        "./init.sh passes after the update"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F028",
+      "title": "Add minspec-to-SPEC normalization governance",
+      "description": "Require Planning Agent work to normalize new requirements into explicit goal, included scope, excluded scope, core flows, constraints, ambiguity handling, required capabilities, implementation paths, and verification surfaces before appending feature entries.",
+      "acceptance": [
+        "AGENTS.md requires Planning Agents to normalize requirements before feature decomposition",
+        "docs/spec-normalization.md defines required SPEC fields: goal, included scope, excluded scope, core flows, constraints, ambiguities or assumptions, required capabilities, implementation paths, and verification surface",
+        "prompts/plan.md rejects vague requirements instead of turning them directly into feature entries",
+        "docs/agent-workflow.md, QUALITY.md, docs/failure-domains.md, SKILL.md, and workflow references document planner and evaluator expectations for spec normalization",
+        "The bundled skill template includes spec-normalization governance so newly initialized projects receive the rule",
+        "Contract tests verify the spec-normalization requirements for AGENTS.md, docs, prompts, quality, failure domains, skill docs, and bundled template files",
+        "./init.sh passes after the governance update"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F029",
+      "title": "Require evaluator evidence before completion",
+      "description": "Add a durable guardrail that fails verification when features at or after the evaluator-evidence baseline are marked done without a run record containing the matching evaluator pass line.",
+      "acceptance": [
+        "AGENTS.md and docs define evaluator evidence as required before a feature may be marked done",
+        "A verification script checks done features at or after the enforcement baseline for matching `EVAL_PASS: Fxxx` run evidence",
+        "./init.sh runs the evaluator-evidence check",
+        "Unit or contract tests prove the evaluator-evidence check fails for missing pass evidence and passes when evidence exists",
+        "Planning, coding, evaluation, progress, README, SKILL.md, workflow references, and bundled template files document the guardrail",
+        "The bundled skill template includes the evaluator-evidence guardrail so newly initialized projects receive it",
+        "./init.sh and scripts/validate-feature.sh F029 pass after evaluator evidence is recorded"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F030",
+      "title": "Make orchestrator the default work entrypoint",
+      "description": "Update the harness so one-feature implementation and evaluation normally begin through the orchestrator, with manual Coding Agent work documented only as an explicit fallback when adapters are unavailable or the user requests interactive/manual work.",
+      "acceptance": [
+        "AGENTS.md, README.md, docs/agent-workflow.md, prompts, SKILL.md, workflow references, and bundled template files describe the orchestrator as the default work entrypoint for one-feature implementation and evaluation",
+        "A documented convenience command or target runs one orchestrator round for the next unfinished feature",
+        "Manual Coding Agent work is documented as an explicit fallback and must not bypass evaluator gating, evaluator evidence, attempts, failure records, or final ./init.sh verification",
+        "Adapter-unavailable flows fail closed with clear guidance instead of silently marking feature state by hand",
+        "Contract tests verify the orchestrator-first default entrypoint and manual-fallback boundaries",
+        "./init.sh and scripts/validate-feature.sh F030 pass after evaluator evidence is recorded"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F031",
+      "title": "Make orchestrator-first agent provider configurable",
+      "description": "Add an explicit provider configuration path for orchestrator role adapters so downstream projects can choose Codex, Claude Code, Cursor Agent, or a custom provider without unsafe implicit guessing.",
+      "acceptance": [
+        "The harness defines a durable provider configuration contract for the Coding Agent and Evaluator Agent adapters",
+        "Provider execution is explicit and fails closed when no provider is configured, the configured command is missing, or multiple provider candidates are present without a selection",
+        "Codex, Claude Code, Cursor Agent, and custom-provider setup guidance is documented without assuming unverified CLI flags or output schemas",
+        "External provider command behavior trusted by the adapters is verified through real help output, official documentation, captured logs, or real-shaped fixtures before being used",
+        "Unit or contract tests cover configured provider dispatch, unconfigured provider failure, missing-command failure, and ambiguous-provider handling",
+        "README.md, SPEC.md, docs/capability-gaps.md, docs/external-behavior.md, SKILL.md, workflow references, and bundled template files stay consistent",
+        "./init.sh and scripts/validate-feature.sh F031 pass after evaluator evidence is recorded"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F032",
+      "title": "Document the new-project skill flow",
+      "description": "Add a concise new-project flow guide with a visual diagram so users can see what the AI Agent Harness skill does, what inputs humans must provide, and how initialization, minspec planning, runnable skeleton, provider setup, orchestrator work, evaluation, init verification, and commit approval fit together.",
+      "acceptance": [
+        "docs/new-project-flow.md explains the end-to-end new project flow from skill invocation through approved commit",
+        "The guide includes a Mermaid flow diagram that distinguishes skill actions, human inputs, orchestrator work, evaluator gating, and ./init.sh verification",
+        "The guide explicitly lists required human inputs: project/install choice, minspec, clarification answers, provider choice, approval to run real agent work, and commit approval",
+        "README.md links to docs/new-project-flow.md near the onboarding path",
+        "docs/README.md, SPEC.md, scripts/init.sh, contract tests, and bundled template files stay consistent",
+        "./init.sh and scripts/validate-feature.sh F032 pass after evaluator evidence is recorded"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    }
+  ]
+}

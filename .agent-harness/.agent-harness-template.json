@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "template_version": "0.3.3",
+  "default_layout": "hidden",
+  "file_categories": {
+    "harness-owned static": "Copied and drift-checked by content hash.",
+    "project-owned state": "Copied or reset during initialization, then validated semantically instead of byte-compared.",
+    "merge-sensitive": "Never overwritten by default because the target project may already own this file.",
+    "optional integration": "Copied when missing and reported when changed, but not required for core harness validity.",
+    "template manifest": "Template metadata used for future drift checks."
+  },
+  "layouts": {
+    "hidden": "Default for installed projects. Root keeps thin AGENTS.md and init.sh entrypoints; the harness body lives under .agent-harness/.",
+    "visible": "Harness development layout. Harness files are copied at repository root for direct inspection and template maintenance."
+  },
+  "version_drift": {
+    "check": "Report installed_version, template_version, drift files, state validity, and next_action.",
+    "repair": "Restore missing files and write an installation manifest without overwriting local modifications.",
+    "upgrade": "Future explicit mode for template-version upgrades after review."
+  }
+}

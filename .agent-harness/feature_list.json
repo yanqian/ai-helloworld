@@ -1,0 +1,68 @@
+{
+  "features": [
+    {
+      "id": "F001",
+      "title": "Backend project recovery init",
+      "description": "Upgrade the root init.sh from harness-only verification into the backend recovery contract for a fresh checkout.",
+      "acceptance": [
+        "Root ./init.sh still runs the AI Agent Harness verification layer.",
+        "Root ./init.sh verifies the Go toolchain and runs the backend Go test suite with a non-committed build cache.",
+        "The script emits clear setup, verification, and success or failure logs.",
+        "The script exits non-zero when harness verification or backend tests fail."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F002",
+      "title": "Protected API contract smoke coverage",
+      "description": "Add durable smoke or contract coverage for the backend HTTP routes that the frontend depends on.",
+      "acceptance": [
+        "Auth, summarizer, UV advisor, Smart FAQ, and Upload & Ask route registration are covered by tests or smoke checks.",
+        "Protected endpoints reject missing or invalid bearer tokens.",
+        "Structured error responses keep the documented error shape.",
+        "The verification path avoids live LLM, OAuth, R2, Postgres, or Valkey credentials unless explicitly configured."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P1"
+    },
+    {
+      "id": "F003",
+      "title": "Upload Ask local capability contract",
+      "description": "Make Upload & Ask setup, fallback behavior, and persistence requirements explicit and locally verifiable.",
+      "acceptance": [
+        "Local development documents when memory fallbacks are used and when Postgres plus pgvector are required.",
+        "Document upload, processing status, QA session, and citation response shapes are covered by tests or fixtures.",
+        "Missing Postgres, pgvector, Valkey, R2, or embedding credentials are reported as durable capability gaps, not hidden local-only workarounds.",
+        "Any smoke check remains deterministic without live external services by default."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P1"
+    },
+    {
+      "id": "F004",
+      "title": "Cross repository API contract alignment",
+      "description": "Keep backend request and response contracts aligned with the sibling frontend repository.",
+      "acceptance": [
+        "The backend records the frontend repository path and shared API surfaces in durable docs or SPEC notes.",
+        "Contract-sensitive JSON fields such as refreshToken, durationMs, tokenUsage, sessionId, and partial_summary are documented.",
+        "A verification step or fixture catches drift for routes used by the frontend.",
+        "The frontend sibling repository receives matching contract notes or feature entries."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P2"
+    }
+  ]
+}

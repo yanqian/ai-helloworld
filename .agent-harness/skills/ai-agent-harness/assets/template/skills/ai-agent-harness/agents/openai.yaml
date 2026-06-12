@@ -1,0 +1,8 @@
+interface:
+  display_name: "AI Agent Harness"
+  short_description: "Initialize and run resumable agent workflows"
+  brand_color: "#2563EB"
+  default_prompt: "Use $ai-agent-harness to initialize this project with the AI Agent Harness and guide the next feature through planning, work, evaluation, and commit."
+
+policy:
+  allow_implicit_invocation: true

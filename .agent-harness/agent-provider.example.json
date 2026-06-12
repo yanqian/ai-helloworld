@@ -1,0 +1,21 @@
+{
+  "provider": "codex",
+  "providers": {
+    "codex": {
+      "command": ["codex", "exec", "-"],
+      "verified": "2026-06-05: `codex exec --help` says instructions are read from stdin when PROMPT is omitted or `-` is used."
+    },
+    "claude-code": {
+      "command": [],
+      "verified": "Configure only after verifying the local Claude Code CLI command, stdin behavior, output, and exit-code semantics."
+    },
+    "cursor-agent": {
+      "command": [],
+      "verified": "Configure only after verifying the local Cursor Agent CLI command, stdin behavior, output, and exit-code semantics."
+    },
+    "custom": {
+      "command": [],
+      "verified": "Set command to a non-empty string array after verifying the provider accepts prompts on stdin and returns meaningful exit codes."
+    }
+  }
+}

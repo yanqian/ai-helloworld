@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/ai-agent-harness-template/feature_list.schema.json",
+  "title": "AI Agent Harness Feature List",
+  "type": "object",
+  "required": ["features"],
+  "additionalProperties": true,
+  "properties": {
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "description",
+          "acceptance",
+          "passes",
+          "status",
+          "attempts",
+          "last_error"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^F[0-9]{3,}$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "acceptance": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "passes": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["todo", "in_progress", "done", "blocked"]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "last_error": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["P0", "P1", "P2"]
+          }
+        }
+      }
+    }
+  }
+}
+
