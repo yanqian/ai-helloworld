@@ -161,6 +161,114 @@ Make the backend a local-first application that can run on a developer machine w
 - Contract-sensitive JSON fields include `refreshToken`, `durationMs`, `tokenUsage`, `sessionId`, `partial_summary`, `documentId`, `chunkIndex`, `score`, `preview`, and `failureReason`.
 - Backend drift verification includes `TestFrontendContractJSONFields`, router protected contract smoke coverage, and Upload & Ask local contract smoke coverage.
 
+## Local Backend Startup Smoke
+
+### Goal
+
+Make local backend startup for frontend/backend联调 deterministic and traceable after the SQLite local-first migration.
+
+### Included Scope
+
+- Local startup with SQLite and a local JWT secret.
+- Startup without `LLM_API_KEY`, using deterministic local AI fallbacks or explicit local-only behavior.
+- A smoke verification path that starts the backend, registers/logs in a local user, calls a protected route, and exercises at least one AI route without live external services.
+- Documentation for the exact local command and required environment.
+
+### Excluded Scope
+
+- Removing the requirement for `JWT_SECRET`; authenticated local flows still need a signing secret.
+- Browser E2E across the frontend and backend.
+- Live LLM quality verification, Google OAuth, R2, Valkey, Postgres, pgvector, or GCP deployment.
+
+### Core Flows
+
+- Developer runs a documented local command with `JWT_SECRET` and no `LLM_API_KEY`.
+- Backend opens SQLite, wires local storage, starts listening on `:8080`, and serves auth plus protected APIs.
+- Smoke script registers a user, logs in, calls `/api/v1/auth/me`, and calls `/api/v1/summaries`.
+
+### Constraints
+
+- Local smoke must use temporary Go caches and must not require committed database files.
+- The default project recovery check must remain deterministic and not leave a long-running server.
+- Live LLM credentials, when provided, should continue to use the real ChatGPT-compatible client.
+
+### Ambiguities Or Assumptions
+
+- `JWT_SECRET` remains the one required local secret because token signing cannot be meaningfully disabled for protected-route联调.
+- Without `LLM_API_KEY`, local AI responses may be deterministic placeholders; real answer quality remains a capability gap.
+
+### Required Capabilities
+
+- A no-network local AI client or provider fallback compatible with summarizer, Smart FAQ, UV advisor, and Upload & Ask embedding/chat call sites.
+- A scriptable startup smoke that can allocate and clean up a backend process.
+
+### Implementation Paths
+
+- ChatGPT-compatible client or provider wiring under `internal/infra/llm/chatgpt` and `cmd/app/providers.go`.
+- Local scripts under `scripts/`.
+- README local联调 instructions.
+- Focused tests in `internal/infra/llm/chatgpt`, `cmd/app`, or startup smoke fixtures.
+
+### Verification Surface
+
+- Focused Go tests for no-key local AI behavior.
+- `scripts/local_smoke.sh` or equivalent starts the built backend, waits for readiness via real API calls, and exits non-zero on failure.
+- Root `./init.sh` continues to pass.
+
+## SQLite Auth Timestamp Compatibility
+
+### Goal
+
+Ensure local SQLite-backed registration, login, and profile fetches keep working when auth rows contain timestamp strings written in either the current RFC3339 format or legacy/database-style space-separated UTC offset formats.
+
+### Included Scope
+
+- SQLite Auth user reads from `users.created_at`.
+- SQLite Auth identity reads from `auth_identities.created_at` and `auth_identities.updated_at`.
+- Compatibility with the observed failing value shape `2025-11-21 14:10:45.570822+00`.
+- Regression tests that reproduce the parsing failure and prove user and identity reads succeed.
+
+### Excluded Scope
+
+- Migrating or rewriting existing SQLite database files.
+- Changing the public Auth API response contract.
+- Changing Postgres timestamp handling.
+- Broad timestamp normalization for every non-Auth SQLite table unless a failing Auth flow requires it.
+
+### Core Flows
+
+- A user registers or logs in against a local SQLite database that already contains database-style timestamp text.
+- Auth repository scans the row, parses the timestamp, and returns a valid domain user or identity instead of failing the request.
+- Current RFC3339 timestamp writes and reads continue to work.
+
+### Constraints
+
+- New writes should continue using the existing RFC3339Nano format for deterministic local storage.
+- Compatibility parsing must be explicit and covered by focused tests.
+- Invalid timestamp strings should still return an error instead of silently zeroing time.
+
+### Ambiguities Or Assumptions
+
+- The failing timestamp likely came from an older local database, manual insert, or database-style default rather than the current `Create` method, because current writes use RFC3339Nano.
+- The immediate user-visible bug is in Auth; other SQLite adapters can receive follow-up compatibility work if they surface the same legacy timestamp shape.
+
+### Required Capabilities
+
+- Focused Go tests for SQLite Auth repository timestamp parsing.
+- Temporary SQLite databases or in-memory files for deterministic verification.
+
+### Implementation Paths
+
+- Auth SQLite adapter: `internal/infra/userrepo/sqlite_repository.go`.
+- Auth SQLite tests: `internal/infra/userrepo/sqlite_repository_test.go`.
+- Harness state and run evidence under `.agent-harness/`.
+
+### Verification Surface
+
+- A focused regression test fails before the parser change and passes after it.
+- `go test -count=1 ./internal/infra/userrepo`.
+- Root `./init.sh` continues to pass.
+
 ## Harness Governance
 
 ### Skill Assisted Workflow

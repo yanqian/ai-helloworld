@@ -148,6 +148,40 @@
       "attempts": 1,
       "last_error": "",
       "priority": "P0"
+    },
+    {
+      "id": "F010",
+      "title": "Local backend startup smoke",
+      "description": "Make local backend startup for frontend/backend联调 deterministic without live LLM credentials.",
+      "acceptance": [
+        "The local backend can start with SQLite and JWT_SECRET without requiring LLM_API_KEY.",
+        "When no live LLM key is configured, AI call sites use deterministic local fallback behavior or return documented local-only responses without panics.",
+        "A local smoke command starts the backend, registers and logs in a user, calls a protected route, and exercises a summarizer route without live external services.",
+        "README local联调 instructions document the exact environment variables and smoke command.",
+        "Root ./init.sh still passes and the smoke command exits non-zero on startup or API failures."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P1"
+    },
+    {
+      "id": "F011",
+      "title": "SQLite Auth timestamp compatibility",
+      "description": "Fix local SQLite Auth reads so registration, login, and profile fetches tolerate legacy/database-style timestamp strings as well as current RFC3339 writes.",
+      "acceptance": [
+        "SQLite Auth user reads parse the observed timestamp shape `2025-11-21 14:10:45.570822+00` without returning an error.",
+        "SQLite Auth identity reads parse compatible created_at and updated_at values without returning an error.",
+        "Current RFC3339Nano Auth timestamp writes and reads continue to work.",
+        "Invalid timestamp strings still return an explicit error instead of silently using zero time.",
+        "Focused Auth SQLite tests and root `./init.sh` pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0"
     }
   ]
 }

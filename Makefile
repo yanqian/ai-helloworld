@@ -10,7 +10,7 @@ SERVICE ?= summarizer
 TAG ?= $(shell git rev-parse --short HEAD)
 IMAGE ?= $(REGION)-docker.pkg.dev/$(GCP_PROJECT)/$(REPOSITORY)/$(SERVICE)
 
-.PHONY: all init-local lint test build run local-run work dry-run harness-validate docker-build docker-push deploy legacy-gcp-deploy gcp-init legacy-gcp-init
+.PHONY: all init-local lint test build run local-run local-smoke work dry-run harness-validate docker-build docker-push deploy legacy-gcp-deploy gcp-init legacy-gcp-init
 
 all: init-local test build
 
@@ -34,6 +34,9 @@ run: build init-local
 	./bin/$(APP_NAME)
 
 local-run: run
+
+local-smoke:
+	scripts/local_smoke.sh
 
 work:
 	cd $(HARNESS_DIR) && $(MAKE) work

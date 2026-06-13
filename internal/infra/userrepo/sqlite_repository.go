@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -133,9 +134,9 @@ func sqliteScanUser(row *sql.Row) (auth.User, bool, error) {
 		}
 		return auth.User{}, false, err
 	}
-	parsed, err := time.Parse(time.RFC3339Nano, created)
+	parsed, err := parseSQLiteAuthTime(created)
 	if err != nil {
-		return auth.User{}, false, err
+		return auth.User{}, false, fmt.Errorf("parse sqlite auth user created_at %q: %w", created, err)
 	}
 	user.CreatedAt = parsed
 	return user, true, nil
@@ -152,15 +153,39 @@ func sqliteScanIdentity(row *sql.Row) (auth.Identity, bool, error) {
 		return auth.Identity{}, false, err
 	}
 	var err error
-	identity.CreatedAt, err = time.Parse(time.RFC3339Nano, created)
+	identity.CreatedAt, err = parseSQLiteAuthTime(created)
 	if err != nil {
-		return auth.Identity{}, false, err
+		return auth.Identity{}, false, fmt.Errorf("parse sqlite auth identity created_at %q: %w", created, err)
 	}
-	identity.UpdatedAt, err = time.Parse(time.RFC3339Nano, updated)
+	identity.UpdatedAt, err = parseSQLiteAuthTime(updated)
 	if err != nil {
-		return auth.Identity{}, false, err
+		return auth.Identity{}, false, fmt.Errorf("parse sqlite auth identity updated_at %q: %w", updated, err)
 	}
 	return identity, true, nil
+}
+
+func parseSQLiteAuthTime(value string) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	layouts := []string{
+		time.RFC3339Nano,
+		"2006-01-02 15:04:05.999999999-07",
+		"2006-01-02 15:04:05.999999999-0700",
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05-07",
+		"2006-01-02 15:04:05-0700",
+		"2006-01-02 15:04:05Z07:00",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05",
+	}
+	var lastErr error
+	for _, layout := range layouts {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed.UTC(), nil
+		}
+		lastErr = err
+	}
+	return time.Time{}, lastErr
 }
 
 func isSQLiteUniqueViolation(err error) bool {

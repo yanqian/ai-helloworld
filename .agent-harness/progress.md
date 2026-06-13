@@ -24,9 +24,13 @@ F004 is complete: the backend records the sibling frontend path `/Users/armstron
 
 F009 is complete: the installed hidden harness files and bundled skill template now match the template fix for final role verdict normalization, including `CODING_PASS` / `CODING_FAIL` prompt output, final matching evaluator verdict parsing, provider contradiction docs, and unit regression tests.
 
+F010 is complete: local backend startup now only requires `JWT_SECRET` for auth signing and no longer requires `LLM_API_KEY`; the ChatGPT-compatible client enters deterministic offline mode for chat, stream, and embedding calls when no live key is configured. `make local-smoke` starts the backend on a temporary port and SQLite database, registers and logs in a user, calls `/api/v1/auth/me`, and exercises `/api/v1/summaries`.
+
+F011 is complete: SQLite Auth user and identity scans now parse both current RFC3339Nano timestamps and legacy/database-style timestamp text such as `2025-11-21 14:10:45.570822+00`, while invalid timestamp strings still return explicit parse errors. Focused regression coverage protects user reads, identity reads, current persisted Auth behavior, and invalid timestamp failures.
+
 ## Last Completed Feature
 
-F004 Cross repository API contract alignment.
+F011 SQLite Auth timestamp compatibility.
 
 ## Next Feature
 
@@ -40,6 +44,9 @@ None.
 - `modernc.org/sqlite` raised the Go directive to 1.25; current local verification uses Go 1.26.
 - Local `.agent-harness/agent-provider.json` is configured for Codex CLI and ignored by git. The harness now normalizes final structured role verdicts, but provider-specific task-complete event schemas remain intentionally unparsed until verified with fixtures.
 - The sibling frontend repository is `/Users/armstrong/Project/ai-helloworld-fe` and needs matching contract awareness.
+- Local backend联调 startup requires `JWT_SECRET`; `LLM_API_KEY` is optional and only needed for real LLM quality. `make local-smoke` verifies the no-live-LLM startup path.
+- Local Auth rows may contain legacy/database-style timestamp text such as `2025-11-21 14:10:45.570822+00`; F011 makes SQLite Auth reads compatible while preserving explicit errors for invalid timestamps.
+- `make work` for F011 invoked the orchestrator successfully but the Codex provider failed before coding because it could not write `/Users/armstrong/.codex/state_5.sqlite` and could not initialize the in-process app-server client. Manual fallback completed F011 with durable evaluator evidence.
 
 ## Recovery Notes
 

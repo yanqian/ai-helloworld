@@ -10,9 +10,12 @@ Shared frontend/backend API contract notes live in [`docs/api-contract.md`](docs
 # Verify the local recovery contract.
 ./init.sh
 
-# Optional: enable real LLM-backed answers.
-export LLM_API_KEY=sk-your-openai-key
+# Required for local auth token signing.
 export JWT_SECRET=replace-this-with-a-secure-secret
+
+# Optional: enable real LLM-backed answers.
+# Without this, local AI routes use deterministic offline responses.
+# export LLM_API_KEY=sk-your-openai-key
 # Optional tweaks:
 # export LLM_BASE_URL=https://api.openai.com/v1
 # export LLM_MODEL=gpt-4o-mini
@@ -20,11 +23,14 @@ export JWT_SECRET=replace-this-with-a-secure-secret
 
 # Start the server. This creates data/ai-helloworld.db when SQLite is enabled.
 make run
+
+# Or run a one-shot local startup/API smoke on a temporary port and database.
+make local-smoke
 ```
 
 Configuration values come from environment variables, `configs/config.yaml`, or defaults in `internal/infra/config`. Local persistence is SQLite by default at `data/ai-helloworld.db`, and SQLite database files are intentionally ignored by git.
 
-`LLM_API_KEY` is only required for real LLM-backed summarization, FAQ answers, embeddings, and Upload & Ask responses. The recovery checks and most local persistence tests run without live AI, OAuth, R2, Postgres, pgvector, Valkey, Redis, or GCP credentials. UV advice uses `UV_API_BASE_URL` (defaults to data.gov.sg) and can be tuned via `UV_PROMPT`.
+`JWT_SECRET` is required for local login and protected-route testing. `LLM_API_KEY` is only required for real LLM-backed summarization, FAQ answers, embeddings, and Upload & Ask responses; without it, local AI routes use deterministic offline responses so the backend can still start for frontend/backend联调. The recovery checks and most local persistence tests run without live AI, OAuth, R2, Postgres, pgvector, Valkey, Redis, or GCP credentials. UV advice uses `UV_API_BASE_URL` (defaults to data.gov.sg) and can be tuned via `UV_PROMPT`.
 
 ## API Usage
 
@@ -131,7 +137,7 @@ All errors use:
 
 ## Tips & Operational Notes
 
-- **Auth**: `JWT_SECRET` secures login tokens and `LLM_API_KEY` is mandatory for LLM access. The `/login` frontend route captures email/password/nickname, stores both tokens plus the nickname in `localStorage`, and silently exchanges refresh tokens when the access token expires.
+- **Auth**: `JWT_SECRET` secures login tokens and is required for local联调. `LLM_API_KEY` is optional for startup and only needed for real LLM quality. The `/login` frontend route captures email/password/nickname, stores both tokens plus the nickname in `localStorage`, and silently exchanges refresh tokens when the access token expires.
 - **Prompt overrides**: Provide `prompt` in the request body to customize ChatGPT instructions; otherwise the default prompt in config is used.
 - **Logging**: Set `LOG_LEVEL=debug` to see raw LLM responses (logged before parsing). Logs are JSON to stdout.
 - **Timeouts**: HTTP read/write timeouts are configurable under the `http` section in config; ensure they exceed typical LLM latency and embedding latency.
