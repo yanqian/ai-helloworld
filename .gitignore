@@ -3,6 +3,9 @@ bin/
 .gocache/
 
 .env
+.agent-harness/agent-provider.json
+data/*.db
+data/*.db-*
 # IDE/editor
 .vscode/
 *.swp

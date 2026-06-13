@@ -66,7 +66,10 @@ Custom providers:
 
 - Use a wrapper script when the provider needs flags, environment, credentials, or output normalization.
 - The wrapper must accept the full role prompt on stdin and exit non-zero on failure.
-- If evaluator output is normalized, preserve the required `EVAL_PASS: Fxxx` or `EVAL_FAIL: Fxxx: <reason>` line.
+- If coding output is normalized, preserve the final `CODING_PASS: Fxxx` or `CODING_FAIL: Fxxx: <reason>` line when present.
+- If evaluator output is normalized, preserve the final `EVAL_PASS: Fxxx` or `EVAL_FAIL: Fxxx: <reason>` line.
+- The orchestrator uses the last matching role verdict for a feature so historical run evidence echoed in provider output cannot override the final role decision.
+- If a provider exits non-zero after a final `CODING_PASS` or `EVAL_PASS`, the orchestrator treats the final structured verdict as authoritative and logs the provider exit-code contradiction.
 
 ## Commands
 

@@ -63,6 +63,91 @@
       "attempts": 0,
       "last_error": "",
       "priority": "P2"
+    },
+    {
+      "id": "F005",
+      "title": "Local SQLite foundation and auth persistence",
+      "description": "Add local SQLite configuration, idempotent schema setup, and an Auth repository so local registrations and logins persist without remote Postgres.",
+      "acceptance": [
+        "Configuration supports an enabled local SQLite database path with an ignored default under data/.",
+        "Auth repository selection uses SQLite for local mode while preserving Postgres and memory fallbacks.",
+        "SQLite schema creation for users and auth identities is idempotent.",
+        "Tests prove users and Google identities persist when a repository is reopened against the same SQLite database file.",
+        "Root ./init.sh passes without requiring GCP or remote database credentials."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F006",
+      "title": "Smart FAQ SQLite persistence",
+      "description": "Persist FAQ questions, embeddings, semantic hash records, cached answers, and trending query counts in SQLite for local use.",
+      "acceptance": [
+        "FAQ question repository has a SQLite implementation with exact, semantic hash, and nearest-neighbor lookup.",
+        "FAQ answer cache and trending queries persist in SQLite without Valkey.",
+        "Provider wiring chooses SQLite FAQ storage in local mode.",
+        "Tests prove FAQ answers and trending counts survive repository/store re-instantiation."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 3,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F007",
+      "title": "Upload Ask SQLite persistence",
+      "description": "Persist Upload & Ask documents, files, chunks, sessions, query logs, chat messages, and memories in SQLite with local similarity search.",
+      "acceptance": [
+        "Upload & Ask document, file, chunk, session, and query log repositories have SQLite implementations.",
+        "SQLite chunk search performs deterministic local similarity over stored embeddings.",
+        "Message log and memory store persist locally in SQLite when memory is enabled.",
+        "Provider wiring chooses SQLite Upload & Ask storage in local mode.",
+        "Tests cover upload metadata, chunk retrieval, session logs, and memory persistence across repository re-instantiation."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P0"
+    },
+    {
+      "id": "F008",
+      "title": "Local-only runtime cleanup",
+      "description": "Update local run scripts, docs, and recovery checks so the backend is presented and verified as a local SQLite app rather than a GCP deployment target.",
+      "acceptance": [
+        "README local setup centers SQLite and local execution instead of GCP deployment.",
+        "Makefile targets no longer make GCP deploy the default operational path.",
+        "GCP-specific scripts or docs are removed, archived, or clearly marked legacy/out of scope.",
+        "Root ./init.sh verifies local SQLite capability without remote service credentials.",
+        "Docs call out which optional live AI credentials are still needed for real LLM-backed flows."
+      ],
+      "passes": false,
+      "status": "todo",
+      "attempts": 0,
+      "last_error": "",
+      "priority": "P1"
+    },
+    {
+      "id": "F009",
+      "title": "Sync harness final verdict normalization",
+      "description": "Update the installed hidden AI Agent Harness files so final Coding Agent and Evaluator Agent verdicts are parsed by final structured role output, matching the template and bundled skill fix.",
+      "acceptance": [
+        "Installed .agent-harness/orchestrator.py uses the final matching Evaluator Agent verdict for the selected feature",
+        "Installed Coding Agent prompt defines CODING_PASS and CODING_FAIL structured verdict lines",
+        "Installed provider configuration docs explain final verdict preservation and non-zero provider exit-code contradiction handling",
+        "Installed unit tests cover historical fail-before-pass evaluator output and structured coding pass output after earlier failure output",
+        "The installed bundled skill template contains the same orchestrator, prompt, docs, and unit-test fixes",
+        "F006 is restored to done based on existing durable EVAL_PASS evidence and root ./init.sh passes after synchronization"
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
     }
   ]
 }

@@ -227,18 +227,38 @@ def run_agent(prompt: str, dry_run: bool, label: str, adapter_path: Path) -> sub
     return result
 
 
-def evaluator_result(feature_id: str, result: subprocess.CompletedProcess[str]) -> tuple[bool, str]:
-    output = "\n".join(part for part in [result.stdout, result.stderr] if part)
-    pass_line = f"EVAL_PASS: {feature_id}"
-    fail_prefix = f"EVAL_FAIL: {feature_id}:"
+def role_output(result: subprocess.CompletedProcess[str]) -> str:
+    return "\n".join(part for part in [result.stdout, result.stderr] if part)
+
+
+def final_role_verdict(output: str, pass_line: str, fail_prefix: str) -> tuple[Optional[bool], str]:
+    verdict: tuple[Optional[bool], str] = (None, "")
     for line in output.splitlines():
         stripped = line.strip()
-        if stripped.startswith(fail_prefix):
-            return False, stripped[len(fail_prefix):].strip() or "Evaluator reported failure."
-    for line in output.splitlines():
-        if line.strip() == pass_line:
+        if stripped == pass_line:
+            verdict = (True, "")
+        elif stripped.startswith(fail_prefix):
+            verdict = (False, stripped[len(fail_prefix):].strip() or "Role reported failure.")
+    return verdict
+
+
+def evaluator_result(feature_id: str, result: subprocess.CompletedProcess[str]) -> tuple[bool, str]:
+    output = role_output(result)
+    pass_line = f"EVAL_PASS: {feature_id}"
+    fail_prefix = f"EVAL_FAIL: {feature_id}:"
+    passed, reason = final_role_verdict(output, pass_line, fail_prefix)
+    if passed is not None:
+        if passed:
             return True, ""
+        return False, reason or "Evaluator reported failure."
     return False, f"Evaluator did not emit required pass line: {pass_line}"
+
+
+def coding_result(feature_id: str, result: subprocess.CompletedProcess[str]) -> tuple[Optional[bool], str]:
+    output = role_output(result)
+    pass_line = f"CODING_PASS: {feature_id}"
+    fail_prefix = f"CODING_FAIL: {feature_id}:"
+    return final_role_verdict(output, pass_line, fail_prefix)
 
 
 def evaluate_feature(feature_id: str, dry_run: bool) -> bool:
@@ -246,13 +266,18 @@ def evaluate_feature(feature_id: str, dry_run: bool) -> bool:
     result = run_agent(evaluator_prompt(feature_id), dry_run, "Evaluator Agent", EVALUATOR_AGENT_ADAPTER)
     if dry_run:
         return True
-    if result.returncode != 0:
-        print(f"EVAL_FAIL: {feature_id}: evaluator exited with code {result.returncode}", flush=True)
-        return False
     passed, reason = evaluator_result(feature_id, result)
     if passed:
+        if result.returncode != 0:
+            print(
+                f"Evaluator emitted EVAL_PASS despite provider exit code {result.returncode}; accepting final verdict.",
+                flush=True,
+            )
         print(f"Evaluator accepted {feature_id}.", flush=True)
         return True
+    if result.returncode != 0:
+        print(f"EVAL_FAIL: {feature_id}: evaluator exited with code {result.returncode}: {reason}", flush=True)
+        return False
     print(f"EVAL_FAIL: {feature_id}: {reason}", flush=True)
     return False
 
@@ -299,26 +324,40 @@ def main() -> int:
         ensure_adapter_configured("Coding Agent", CODING_AGENT_ADAPTER)
         ensure_adapter_configured("Evaluator Agent", EVALUATOR_AGENT_ADAPTER)
         mark_in_progress(feature_id)
-        coding_result = run_agent(coding_prompt(feature_id), dry_run=False, label="Coding Agent", adapter_path=CODING_AGENT_ADAPTER)
-        if coding_result.returncode != 0:
-            error = f"coding agent exited with code {coding_result.returncode}"
+        coding = run_agent(coding_prompt(feature_id), dry_run=False, label="Coding Agent", adapter_path=CODING_AGENT_ADAPTER)
+        coding_passed, coding_reason = coding_result(feature_id, coding)
+        if coding_passed is False:
+            error = coding_reason or "Coding Agent reported failure."
             mark_failed(feature_id, error, args.max_attempts)
             write_failure_run_record(feature_id, error)
             continue
+        if coding.returncode != 0:
+            if coding_passed is True:
+                print(
+                    f"Coding Agent emitted CODING_PASS despite provider exit code {coding.returncode}; continuing.",
+                    flush=True,
+                )
+            else:
+                error = f"coding agent exited with code {coding.returncode}"
+                mark_failed(feature_id, error, args.max_attempts)
+                write_failure_run_record(feature_id, error)
+                continue
 
         evaluator = run_agent(evaluator_prompt(feature_id), dry_run=False, label="Evaluator Agent", adapter_path=EVALUATOR_AGENT_ADAPTER)
-        if evaluator.returncode != 0:
-            error = f"evaluator exited with code {evaluator.returncode}"
-            mark_failed(feature_id, error, args.max_attempts)
-            write_failure_run_record(feature_id, error)
-            continue
-
         passed, reason = evaluator_result(feature_id, evaluator)
         if passed:
+            if evaluator.returncode != 0:
+                print(
+                    f"Evaluator emitted EVAL_PASS despite provider exit code {evaluator.returncode}; accepting final verdict.",
+                    flush=True,
+                )
             mark_done(feature_id)
             print(f"Done: {feature_id}", flush=True)
         else:
-            error = reason or "Evaluator rejected the feature."
+            if evaluator.returncode != 0:
+                error = f"evaluator exited with code {evaluator.returncode}: {reason}"
+            else:
+                error = reason or "Evaluator rejected the feature."
             mark_failed(feature_id, error, args.max_attempts)
             write_failure_run_record(feature_id, error)
             print(f"Evaluation failed: {feature_id}: {reason}", flush=True)

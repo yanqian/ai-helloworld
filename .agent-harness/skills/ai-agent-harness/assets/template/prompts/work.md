@@ -44,3 +44,10 @@ Return:
 - Capability gaps and durable capability changes or follow-up feature when applicable.
 - Example-boundary assessment when `examples/` changed.
 - Suggested commit message.
+
+End with exactly one structured coding verdict line:
+
+```text
+CODING_PASS: Fxxx
+CODING_FAIL: Fxxx: <reason>
+```

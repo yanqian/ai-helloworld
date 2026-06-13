@@ -1,4 +1,5 @@
 APP_NAME=ai-helloworld
+HARNESS_DIR ?= .agent-harness
 GCP_PROJECT ?= ai-helloworld-yan
 REGION ?= asia-southeast1
 REPOSITORY ?= backend-repo
@@ -6,7 +7,7 @@ SERVICE ?= summarizer
 TAG ?= $(shell git rev-parse --short HEAD)
 IMAGE ?= $(REGION)-docker.pkg.dev/$(GCP_PROJECT)/$(REPOSITORY)/$(SERVICE)
 
-.PHONY: all lint test build run docker-build docker-push deploy gcp-init
+.PHONY: all lint test build run work dry-run harness-validate docker-build docker-push deploy gcp-init
 
 all: lint test build
 
@@ -25,6 +26,14 @@ run:
 	set +a; \
 	./bin/$(APP_NAME)
 
+work:
+	cd $(HARNESS_DIR) && $(MAKE) work
+
+dry-run:
+	cd $(HARNESS_DIR) && $(MAKE) dry-run
+
+harness-validate:
+	cd $(HARNESS_DIR) && $(MAKE) validate FEATURE=$(FEATURE)
 
 docker-build:
 	docker build -t $(IMAGE):$(TAG) .
@@ -42,4 +51,3 @@ deploy: docker-push
 
 gcp-init:
 	scripts/setup_gcp_project.sh ai-helloworld-yan ${BILLING_ACCOUNT_ID} asia-southeast1 backend-repo summarizer
-

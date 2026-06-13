@@ -14,12 +14,19 @@ import (
 // Config aggregates runtime configuration used across the service.
 type Config struct {
 	HTTP      HTTPConfig      `yaml:"http"`
+	SQLite    SQLiteConfig    `yaml:"sqlite"`
 	Summary   SummaryConfig   `yaml:"summary"`
 	LLM       LLMConfig       `yaml:"llm"`
 	UVAdvisor UVAdvisorConfig `yaml:"uvAdvisor"`
 	FAQ       FAQConfig       `yaml:"faq"`
 	Auth      AuthConfig      `yaml:"auth"`
 	UploadAsk UploadAskConfig `yaml:"uploadAsk"`
+}
+
+// SQLiteConfig controls local SQLite persistence.
+type SQLiteConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Path    string `yaml:"path"`
 }
 
 // HTTPConfig controls server level behavior.
@@ -197,6 +204,12 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("HTTP_ALLOWED_ORIGINS"); v != "" {
 		cfg.HTTP.AllowedOrigins = splitAndTrim(v)
+	}
+	if v := os.Getenv("SQLITE_ENABLED"); v != "" {
+		cfg.SQLite.Enabled = v == "1" || strings.EqualFold(v, "true")
+	}
+	if v := os.Getenv("SQLITE_PATH"); v != "" {
+		cfg.SQLite.Path = v
 	}
 	if v := os.Getenv("SUMMARY_MAX_LEN"); v != "" {
 		if parsed, err := strconv.Atoi(v); err == nil {
@@ -448,6 +461,10 @@ func defaultConfig() *Config {
 				},
 			},
 		},
+		SQLite: SQLiteConfig{
+			Enabled: true,
+			Path:    "data/ai-helloworld.db",
+		},
 		Summary: SummaryConfig{
 			MaxSummaryLen: 200,
 			MaxKeywords:   5,
@@ -520,6 +537,9 @@ func defaultConfig() *Config {
 func (c *Config) Validate() error {
 	if c.HTTP.Address == "" {
 		return errors.New("http.address cannot be empty")
+	}
+	if c.SQLite.Enabled && strings.TrimSpace(c.SQLite.Path) == "" {
+		return errors.New("sqlite.path cannot be empty when sqlite is enabled")
 	}
 	if c.Summary.MaxSummaryLen <= 0 {
 		return errors.New("summary.maxSummaryLen must be positive")

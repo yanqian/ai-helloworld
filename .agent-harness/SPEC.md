@@ -79,6 +79,78 @@ Feature count is determined by independently verifiable behavior and capability 
 - F002 covers auth/API contract protection because it is a distinct security boundary.
 - F003 covers Upload & Ask local capability because it spans persistence, retrieval, and background processing risks.
 - F004 covers cross-repository API drift because it is shared with the frontend and should be verified as a contract rather than hidden in either side.
+- F005 covers SQLite foundation plus Auth persistence because local login state is the first durable storage capability needed for a useful local backend.
+- F006 covers Smart FAQ SQLite persistence because it has separate question, answer-cache, semantic search, and trending behavior.
+- F007 covers Upload & Ask SQLite persistence because document metadata, chunks, sessions, query logs, messages, and memories form a larger RAG-specific persistence boundary.
+- F008 covers local-only runtime cleanup because removing GCP deployment assumptions affects Makefile, README, config defaults, and recovery docs rather than repository adapters.
+
+## Local SQLite Backend Requirement
+
+### Goal
+
+Make the backend a local-first application that can run on a developer machine with SQLite-backed persistence instead of depending on GCP, Cloud Run, remote Postgres, pgvector, Valkey, or R2 for ordinary local use.
+
+### Scope Included
+
+- Add SQLite configuration and a shared local database file path, defaulting to an ignored `data/` location.
+- Use SQLite for local Auth persistence first, then extend SQLite persistence to Smart FAQ and Upload & Ask in separate features.
+- Keep existing Postgres, Valkey, and R2 adapters available as optional legacy/integration paths unless explicitly removed later.
+- Update project-owned docs and recovery scripts so local run instructions no longer center GCP deployment.
+- Keep local verification deterministic and free of live remote database credentials.
+
+### Scope Excluded
+
+- Migrating existing remote production data into SQLite.
+- Removing LLM/API-key requirements for real AI calls.
+- Building a frontend-visible data migration UI.
+- Implementing high-performance vector indexing; local SQLite retrieval may use deterministic in-process similarity over stored embeddings.
+- Pushing or deploying to GCP.
+
+### Core Flows
+
+- A local developer starts the backend with a local `.env` or defaults, and the app opens or creates a SQLite database file.
+- A user registers, logs in, refreshes a token, and remains persisted after backend restart.
+- Smart FAQ questions, generated answers, and trending counts persist locally through SQLite once F006 is complete.
+- Upload & Ask documents, chunks, sessions, logs, messages, and memories persist locally through SQLite once F007 is complete.
+- `./init.sh` verifies local mode without requiring GCP, remote Postgres, Valkey, R2, or pgvector.
+
+### Constraints
+
+- SQLite database files under `data/` must not be committed.
+- Local tests must use temporary SQLite files or in-memory databases.
+- SQLite schema creation must be idempotent.
+- Existing interfaces should remain domain-owned; SQLite should be an infrastructure adapter.
+- F005 must not bundle all FAQ and Upload & Ask persistence work.
+
+### Ambiguities Or Assumptions
+
+- "No GCP deployment" means the local developer workflow should stop relying on GCP; existing deploy scripts can be removed or demoted in F008 rather than immediately deleting every legacy cloud reference.
+- The default local SQLite file may be `data/ai-helloworld.db`.
+- Postgres adapters can remain available for compatibility until the user asks to delete them.
+
+### Required Capabilities
+
+- A Go SQLite driver available in normal `go test ./...` verification.
+- Idempotent SQLite migrations for every table added.
+- Tests that prove persistence survives repository re-instantiation against the same SQLite file.
+- Documentation that names remote-service gaps instead of hiding them.
+
+### Implementation Paths
+
+- Config: `internal/infra/config/config.go`, `configs/config.yaml`, `.gitignore`.
+- SQLite infrastructure: `internal/infra/sqlite`.
+- Auth adapter: `internal/infra/userrepo`.
+- Future FAQ adapters: `internal/infra/faqrepo` and `internal/infra/faqstore`.
+- Future Upload & Ask adapters: `internal/infra/uploadask/repo` and `internal/infra/uploadask/memory`.
+- Providers: `cmd/app/providers.go`.
+- Tests: focused `*_test.go` files plus root `./init.sh`.
+
+### Verification Surface
+
+- `go test ./...` through root `./init.sh`.
+- SQLite auth persistence tests using a temporary database file.
+- Later feature tests for FAQ and Upload & Ask persistence.
+- `git status --short` should keep SQLite database files untracked/ignored.
 
 ## Harness Governance
 

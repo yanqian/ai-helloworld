@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -24,6 +25,7 @@ import (
 	"github.com/yanqian/ai-helloworld/internal/infra/faqrepo"
 	"github.com/yanqian/ai-helloworld/internal/infra/faqstore"
 	"github.com/yanqian/ai-helloworld/internal/infra/llm/chatgpt"
+	sqliteinfra "github.com/yanqian/ai-helloworld/internal/infra/sqlite"
 	uploadchunker "github.com/yanqian/ai-helloworld/internal/infra/uploadask/chunker"
 	uploadembedder "github.com/yanqian/ai-helloworld/internal/infra/uploadask/embedder"
 	uploadllm "github.com/yanqian/ai-helloworld/internal/infra/uploadask/llm"
@@ -91,6 +93,10 @@ func provideFAQConfig(cfg *config.Config) faq.Config {
 
 func provideFAQRepository(cfg *config.Config, logger *slog.Logger) faq.QuestionRepository {
 	fallback := faqrepo.NewMemoryRepository()
+	if db := sqliteDB(cfg, logger); db != nil {
+		logger.Info("faq sqlite repository enabled", "path", cfg.SQLite.Path)
+		return faqrepo.NewSQLiteRepository(db)
+	}
 	dsn := strings.TrimSpace(cfg.FAQ.Postgres.DSN)
 	if dsn == "" {
 		logger.Info("faq postgres dsn not set, using memory repository")
@@ -124,6 +130,10 @@ func provideFAQRepository(cfg *config.Config, logger *slog.Logger) faq.QuestionR
 }
 
 func provideFAQStore(cfg *config.Config, logger *slog.Logger) faq.Store {
+	if db := sqliteDB(cfg, logger); db != nil {
+		logger.Info("faq sqlite store enabled", "path", cfg.SQLite.Path)
+		return faqstore.NewSQLiteStore(db)
+	}
 	if cfg.FAQ.Redis.Enabled {
 		opt, err := buildValkeyOptions(cfg.FAQ.Redis.Addr)
 		if err != nil {
@@ -149,6 +159,10 @@ func provideFAQStore(cfg *config.Config, logger *slog.Logger) faq.Store {
 
 func provideAuthRepository(cfg *config.Config, logger *slog.Logger) auth.Repository {
 	fallback := userrepo.NewMemoryRepository()
+	if db := sqliteDB(cfg, logger); db != nil {
+		logger.Info("auth sqlite repository enabled", "path", cfg.SQLite.Path)
+		return userrepo.NewSQLiteRepository(db)
+	}
 	dsn := strings.TrimSpace(cfg.Auth.Postgres.DSN)
 	if dsn == "" {
 		logger.Info("auth postgres dsn not set, using memory repository")
@@ -180,6 +194,27 @@ func provideAuthRepository(cfg *config.Config, logger *slog.Logger) auth.Reposit
 	}
 	logger.Info("auth postgres repository enabled")
 	return userrepo.NewPostgresRepository(pool)
+}
+
+var (
+	sqliteOnce sync.Once
+	sqliteConn *sql.DB
+)
+
+func sqliteDB(cfg *config.Config, logger *slog.Logger) *sql.DB {
+	if !cfg.SQLite.Enabled {
+		return nil
+	}
+	sqliteOnce.Do(func() {
+		db, err := sqliteinfra.Open(context.Background(), cfg.SQLite.Path)
+		if err != nil {
+			logger.Error("failed to initialize sqlite, falling back to non-sqlite repositories", "path", cfg.SQLite.Path, "error", err)
+			return
+		}
+		sqliteConn = db
+		logger.Info("sqlite database enabled", "path", cfg.SQLite.Path)
+	})
+	return sqliteConn
 }
 
 func provideUploadAskConfig(cfg *config.Config) uploadask.Config {

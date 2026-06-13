@@ -1,4 +1,5 @@
 import json
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -20,6 +21,13 @@ def run_command(args, env=None, input_text=None):
 def write_executable(path, text):
     path.write_text(text)
     path.chmod(0o755)
+
+
+def load_orchestrator():
+    spec = importlib.util.spec_from_file_location("orchestrator", ROOT / "orchestrator.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class ScriptUnitTests(unittest.TestCase):
@@ -294,6 +302,60 @@ class ScriptUnitTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("provider received: hello evaluator", result.stdout)
+
+    def test_orchestrator_evaluator_result_uses_final_matching_verdict(self):
+        orchestrator = load_orchestrator()
+        result = subprocess.CompletedProcess(
+            ["evaluator"],
+            0,
+            stdout=(
+                "historical run evidence\n"
+                "EVAL_FAIL: F006: old provider failure\n"
+                "final evaluator decision\n"
+                "EVAL_PASS: F006\n"
+            ),
+            stderr="",
+        )
+        self.assertEqual(orchestrator.evaluator_result("F006", result), (True, ""))
+
+        result = subprocess.CompletedProcess(
+            ["evaluator"],
+            0,
+            stdout=(
+                "historical run evidence\n"
+                "EVAL_PASS: F006\n"
+                "final evaluator decision\n"
+                "EVAL_FAIL: F006: acceptance criteria not met\n"
+            ),
+            stderr="",
+        )
+        self.assertEqual(
+            orchestrator.evaluator_result("F006", result),
+            (False, "acceptance criteria not met"),
+        )
+
+    def test_orchestrator_coding_result_uses_final_matching_verdict(self):
+        orchestrator = load_orchestrator()
+        result = subprocess.CompletedProcess(
+            ["coding"],
+            1,
+            stdout=(
+                "intermediate failed attempt\n"
+                "CODING_FAIL: F009: transient command failed\n"
+                "final coding decision\n"
+                "CODING_PASS: F009\n"
+            ),
+            stderr="",
+        )
+        self.assertEqual(orchestrator.coding_result("F009", result), (True, ""))
+
+        result = subprocess.CompletedProcess(
+            ["coding"],
+            1,
+            stdout="completed without structured coding verdict\n",
+            stderr="",
+        )
+        self.assertEqual(orchestrator.coding_result("F009", result), (None, ""))
 
 
 if __name__ == "__main__":

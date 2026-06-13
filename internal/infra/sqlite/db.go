@@ -1,0 +1,109 @@
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	_ "modernc.org/sqlite"
+)
+
+// Open opens a SQLite database and applies shared local schema migrations.
+func Open(ctx context.Context, path string) (*sql.DB, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil, fmt.Errorf("sqlite path cannot be empty")
+	}
+	if err := ensureDir(path); err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite: %w", err)
+	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("enable sqlite foreign keys: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, "PRAGMA busy_timeout = 5000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("set sqlite busy timeout: %w", err)
+	}
+	if err := migrate(ctx, db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
+func ensureDir(path string) error {
+	if path == ":memory:" || strings.HasPrefix(path, "file:") {
+		return nil
+	}
+	dir := filepath.Dir(path)
+	if dir == "." || dir == "" {
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create sqlite directory: %w", err)
+	}
+	return nil
+}
+
+func migrate(ctx context.Context, db *sql.DB) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			email TEXT NOT NULL UNIQUE,
+			nickname TEXT NOT NULL,
+			password_hash TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS auth_identities (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			provider TEXT NOT NULL,
+			provider_subject TEXT NOT NULL,
+			provider_email TEXT NOT NULL,
+			refresh_token TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			UNIQUE(provider, provider_subject),
+			UNIQUE(user_id, provider),
+			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS faq_questions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			question_text TEXT NOT NULL UNIQUE,
+			embedding TEXT NOT NULL,
+			semantic_hash TEXT,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_faq_questions_semantic_hash
+			ON faq_questions(semantic_hash)`,
+		`CREATE TABLE IF NOT EXISTS faq_answer_cache (
+			question_id INTEGER PRIMARY KEY,
+			question_text TEXT NOT NULL,
+			answer TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			expires_at TEXT,
+			FOREIGN KEY(question_id) REFERENCES faq_questions(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS faq_trending_queries (
+			canonical TEXT PRIMARY KEY,
+			display TEXT NOT NULL,
+			count INTEGER NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("migrate sqlite schema: %w", err)
+		}
+	}
+	return nil
+}
