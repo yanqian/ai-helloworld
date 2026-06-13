@@ -99,6 +99,86 @@ func migrate(ctx context.Context, db *sql.DB) error {
 			count INTEGER NOT NULL,
 			updated_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS upload_documents (
+			id TEXT PRIMARY KEY,
+			user_id INTEGER NOT NULL,
+			title TEXT NOT NULL,
+			source TEXT NOT NULL,
+			status TEXT NOT NULL,
+			failure_reason TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_upload_documents_user_created
+			ON upload_documents(user_id, created_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS upload_file_objects (
+			id TEXT PRIMARY KEY,
+			document_id TEXT NOT NULL UNIQUE,
+			storage_key TEXT NOT NULL,
+			size_bytes INTEGER NOT NULL,
+			mime_type TEXT NOT NULL,
+			etag TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(document_id) REFERENCES upload_documents(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS upload_document_chunks (
+			id TEXT PRIMARY KEY,
+			document_id TEXT NOT NULL,
+			chunk_index INTEGER NOT NULL,
+			content TEXT NOT NULL,
+			token_count INTEGER NOT NULL,
+			embedding TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			UNIQUE(document_id, chunk_index),
+			FOREIGN KEY(document_id) REFERENCES upload_documents(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_upload_document_chunks_document
+			ON upload_document_chunks(document_id, chunk_index)`,
+		`CREATE TABLE IF NOT EXISTS upload_qa_sessions (
+			id TEXT PRIMARY KEY,
+			user_id INTEGER NOT NULL,
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_upload_qa_sessions_user_created
+			ON upload_qa_sessions(user_id, created_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS upload_query_logs (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			query_text TEXT NOT NULL,
+			response_text TEXT NOT NULL,
+			latency_ms INTEGER NOT NULL,
+			sources TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(session_id) REFERENCES upload_qa_sessions(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_upload_query_logs_session_created
+			ON upload_query_logs(session_id, created_at DESC)`,
+		`CREATE TABLE IF NOT EXISTS upload_qa_messages (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id TEXT NOT NULL,
+			user_id INTEGER NOT NULL,
+			role TEXT NOT NULL,
+			content TEXT NOT NULL,
+			token_count INTEGER NOT NULL,
+			created_at TEXT NOT NULL,
+			FOREIGN KEY(session_id) REFERENCES upload_qa_sessions(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_upload_qa_messages_session_created
+			ON upload_qa_messages(session_id, user_id, created_at DESC, id DESC)`,
+		`CREATE TABLE IF NOT EXISTS upload_qa_memories (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_id TEXT NOT NULL,
+			user_id INTEGER NOT NULL,
+			source TEXT NOT NULL,
+			content TEXT NOT NULL,
+			embedding TEXT,
+			importance INTEGER NOT NULL,
+			created_at TEXT NOT NULL,
+			UNIQUE(user_id, session_id, source, content),
+			FOREIGN KEY(session_id) REFERENCES upload_qa_sessions(id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_upload_qa_memories_session_user
+			ON upload_qa_memories(user_id, session_id)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.ExecContext(ctx, stmt); err != nil {

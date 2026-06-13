@@ -78,7 +78,7 @@ uploadAsk:
     bucket: "upload-ask-prod" # set via R2 bucket name
     region: "" # optional
   redis:
-    enabled: true
+    enabled: false
     addr: "" # set via UPLOADASK_REDIS_ADDR
   postgres:
     dsn: "" # set via UPLOADASK_POSTGRES_DSN in production

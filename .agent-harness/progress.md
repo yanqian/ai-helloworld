@@ -12,19 +12,21 @@ F005 is complete: local SQLite configuration defaults to `data/ai-helloworld.db`
 
 F006 is complete: Smart FAQ questions, embeddings, semantic hashes, cached answers, and trending counts persist through SQLite in local mode, with repository/store reopen tests and provider wiring coverage. Earlier orchestrator/provider contradiction records are preserved as run evidence, but F006 has durable `EVAL_PASS: F006` records and is restored to `passes=true`, `status=done` after the harness verdict-normalization fix.
 
+F007 is complete: Upload & Ask documents, file metadata, chunks, QA sessions, query logs, conversation messages, and long-term memories now persist through SQLite in local mode. Local chunk and memory similarity search runs deterministically in Go over JSON-stored embeddings, and provider wiring selects SQLite before Postgres or memory fallbacks.
+
 F009 is complete: the installed hidden harness files and bundled skill template now match the template fix for final role verdict normalization, including `CODING_PASS` / `CODING_FAIL` prompt output, final matching evaluator verdict parsing, provider contradiction docs, and unit regression tests.
 
 ## Last Completed Feature
 
-F009 Sync harness final verdict normalization.
+F007 Upload Ask SQLite persistence.
 
 ## Next Feature
 
-F007 Upload Ask SQLite persistence.
+F008 Local-only runtime cleanup.
 
 ## Known Issues
 
-- New local-first SQLite requirement has been planned. F007 should move Upload & Ask persistence to SQLite.
+- New local-first SQLite requirement has F005-F007 complete. F008 should clean up local runtime docs and legacy deployment defaults.
 - Real LLM and optional Google OAuth verification still require explicit credentials.
 - Remote Postgres, pgvector, Valkey, R2, and GCP deployment are no longer desired for ordinary local operation, but existing adapters remain until local replacements are complete.
 - `modernc.org/sqlite` raised the Go directive to 1.25; current local verification uses Go 1.26.

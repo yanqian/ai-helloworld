@@ -108,9 +108,9 @@
         "Provider wiring chooses SQLite Upload & Ask storage in local mode.",
         "Tests cover upload metadata, chunk retrieval, session logs, and memory persistence across repository re-instantiation."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P0"
     },

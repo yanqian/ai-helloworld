@@ -281,6 +281,10 @@ func provideUploadChunker() uploadask.Chunker {
 }
 
 func provideUploadDocumentRepository(cfg *config.Config, logger *slog.Logger) uploadask.DocumentRepository {
+	if db := sqliteDB(cfg, logger); db != nil {
+		logger.Info("uploadask sqlite document repository enabled", "path", cfg.SQLite.Path)
+		return uploadrepo.NewSQLiteDocumentRepository(db)
+	}
 	pool := uploadPostgresPool(cfg, logger)
 	if pool != nil {
 		return uploadrepo.NewPostgresDocumentRepository(pool)
@@ -290,6 +294,10 @@ func provideUploadDocumentRepository(cfg *config.Config, logger *slog.Logger) up
 }
 
 func provideUploadFileRepository(cfg *config.Config, logger *slog.Logger) uploadask.FileObjectRepository {
+	if db := sqliteDB(cfg, logger); db != nil {
+		logger.Info("uploadask sqlite file repository enabled", "path", cfg.SQLite.Path)
+		return uploadrepo.NewSQLiteFileRepository(db)
+	}
 	pool := uploadPostgresPool(cfg, logger)
 	if pool != nil {
 		return uploadrepo.NewPostgresFileRepository(pool)
@@ -299,6 +307,10 @@ func provideUploadFileRepository(cfg *config.Config, logger *slog.Logger) upload
 }
 
 func provideUploadChunkRepository(cfg *config.Config, docRepo uploadask.DocumentRepository, logger *slog.Logger) uploadask.ChunkRepository {
+	if db := sqliteDB(cfg, logger); db != nil {
+		logger.Info("uploadask sqlite chunk repository enabled", "path", cfg.SQLite.Path)
+		return uploadrepo.NewSQLiteChunkRepository(db)
+	}
 	pool := uploadPostgresPool(cfg, logger)
 	if pool != nil {
 		return uploadrepo.NewPostgresChunkRepository(pool)
@@ -308,6 +320,10 @@ func provideUploadChunkRepository(cfg *config.Config, docRepo uploadask.Document
 }
 
 func provideUploadSessionRepository(cfg *config.Config, logger *slog.Logger) uploadask.QASessionRepository {
+	if db := sqliteDB(cfg, logger); db != nil {
+		logger.Info("uploadask sqlite session repository enabled", "path", cfg.SQLite.Path)
+		return uploadrepo.NewSQLiteQASessionRepository(db)
+	}
 	pool := uploadPostgresPool(cfg, logger)
 	if pool != nil {
 		return uploadrepo.NewPostgresQASessionRepository(pool)
@@ -317,6 +333,10 @@ func provideUploadSessionRepository(cfg *config.Config, logger *slog.Logger) upl
 }
 
 func provideUploadQueryLogRepository(cfg *config.Config, logger *slog.Logger) uploadask.QueryLogRepository {
+	if db := sqliteDB(cfg, logger); db != nil {
+		logger.Info("uploadask sqlite query log repository enabled", "path", cfg.SQLite.Path)
+		return uploadrepo.NewSQLiteQueryLogRepository(db)
+	}
 	pool := uploadPostgresPool(cfg, logger)
 	if pool != nil {
 		return uploadrepo.NewPostgresQueryLogRepository(pool)
@@ -326,6 +346,10 @@ func provideUploadQueryLogRepository(cfg *config.Config, logger *slog.Logger) up
 }
 
 func provideUploadMessageLog(cfg *config.Config, logger *slog.Logger) uploadask.MessageLog {
+	if db := sqliteDB(cfg, logger); db != nil {
+		logger.Info("uploadask sqlite message log enabled", "path", cfg.SQLite.Path)
+		return uploadmemory.NewSQLiteMessageLog(db)
+	}
 	pool := uploadPostgresPool(cfg, logger)
 	if pool != nil {
 		return uploadmemory.NewPostgresMessageLog(pool)
@@ -338,6 +362,10 @@ func provideUploadMemoryStore(cfg *config.Config, logger *slog.Logger) uploadask
 	if !cfg.UploadAsk.Memory.Enabled {
 		logger.Info("uploadask memory disabled")
 		return nil
+	}
+	if db := sqliteDB(cfg, logger); db != nil {
+		logger.Info("uploadask sqlite memory store enabled", "path", cfg.SQLite.Path)
+		return uploadmemory.NewSQLiteMemoryStore(db)
 	}
 	pool := uploadPostgresPool(cfg, logger)
 	if pool != nil {
