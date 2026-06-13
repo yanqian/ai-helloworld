@@ -17,7 +17,7 @@ flowchart LR
 
     subgraph Workers [Workers]
         direction TB
-        Queue[Redis/Valkey queue]
+        Queue[Immediate queue or legacy Redis/Valkey]
         Processor[Worker: process_document]
         Summarizer[Worker: summarize_session]
         Chunker[Chunker]
@@ -27,10 +27,10 @@ flowchart LR
 
     subgraph Stores [Stores]
         direction TB
-        Storage[(Object storage R2/S3/memory)]
-        DocRepo[(Postgres: documents/files/chunks/sessions/query_logs)]
-        MsgRepo[(Postgres: upload_qa_messages)]
-        MemRepo[(Postgres: upload_qa_memories)]
+        Storage[(Memory blob storage or legacy R2/S3)]
+        DocRepo[(SQLite: documents/files/chunks/sessions/query_logs)]
+        MsgRepo[(SQLite: upload_qa_messages)]
+        MemRepo[(SQLite: upload_qa_memories)]
     end
 
     %% Auth

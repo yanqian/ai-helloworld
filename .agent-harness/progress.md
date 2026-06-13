@@ -18,15 +18,17 @@ F008 is complete: local setup docs now center SQLite and `./init.sh`/`make run`;
 
 F002 is complete: router-level contract smoke coverage now verifies protected route registration across Auth, summarizer, UV advisor, Smart FAQ, and Upload & Ask; missing bearer tokens return structured `unauthorized` errors; representative invalid bearer tokens return structured `invalid_token` errors; and public auth error contracts are covered without live external services.
 
+F003 is complete: Upload & Ask now has a durable local capability contract documenting SQLite defaults, memory blob storage, immediate queues, deterministic embeddings, Echo LLM, legacy Postgres/pgvector/R2/Valkey capability gaps, and frontend-sensitive response shapes. A deterministic HTTP smoke covers upload response metadata, pending-to-processed status, document listing, QA session creation, citation sources, and query log shapes without live external services.
+
 F009 is complete: the installed hidden harness files and bundled skill template now match the template fix for final role verdict normalization, including `CODING_PASS` / `CODING_FAIL` prompt output, final matching evaluator verdict parsing, provider contradiction docs, and unit regression tests.
 
 ## Last Completed Feature
 
-F002 Protected API contract smoke coverage.
+F003 Upload Ask local capability contract.
 
 ## Next Feature
 
-F003 Upload Ask local capability contract.
+F004 Cross repository API contract alignment.
 
 ## Known Issues
 

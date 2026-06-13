@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/yanqian/ai-helloworld/internal/domain/auth"
@@ -22,6 +24,12 @@ import (
 	uploadask "github.com/yanqian/ai-helloworld/internal/domain/uploadask"
 	"github.com/yanqian/ai-helloworld/internal/domain/uvadvisor"
 	"github.com/yanqian/ai-helloworld/internal/infra/config"
+	uploadchunker "github.com/yanqian/ai-helloworld/internal/infra/uploadask/chunker"
+	uploadembedder "github.com/yanqian/ai-helloworld/internal/infra/uploadask/embedder"
+	uploadllm "github.com/yanqian/ai-helloworld/internal/infra/uploadask/llm"
+	uploadmemory "github.com/yanqian/ai-helloworld/internal/infra/uploadask/memory"
+	uploadrepo "github.com/yanqian/ai-helloworld/internal/infra/uploadask/repo"
+	uploadstorage "github.com/yanqian/ai-helloworld/internal/infra/uploadask/storage"
 	apperrors "github.com/yanqian/ai-helloworld/pkg/errors"
 )
 
@@ -297,6 +305,92 @@ func TestRouter_PublicAuthContractSmoke(t *testing.T) {
 	}
 }
 
+func TestRouter_UploadAskLocalContractSmoke(t *testing.T) {
+	uploadSvc := newLocalUploadAskServiceForTest()
+	server := newRouterUnderTest(t, &stubSummarizer{}, nil, nil, nil, uploadSvc)
+
+	upload := performMultipartUpload(t, "/api/v1/upload-ask/documents", server, "local-notes.txt", "Local Notes", "Local SQLite upload ask contract text with citation context.")
+	require.Equal(t, http.StatusAccepted, upload.Code)
+
+	var uploadBody struct {
+		Document uploadask.Document `json:"document"`
+	}
+	require.NoError(t, json.Unmarshal(upload.Body.Bytes(), &uploadBody))
+	require.NotEqual(t, uuid.Nil, uploadBody.Document.ID)
+	require.Equal(t, int64(1), uploadBody.Document.UserID)
+	require.Equal(t, "Local Notes", uploadBody.Document.Title)
+	require.Equal(t, uploadask.DocumentSourceUpload, uploadBody.Document.Source)
+	require.Equal(t, uploadask.DocumentStatusPending, uploadBody.Document.Status)
+	require.False(t, uploadBody.Document.CreatedAt.IsZero())
+	require.False(t, uploadBody.Document.UpdatedAt.IsZero())
+
+	docPath := "/api/v1/upload-ask/documents/" + uploadBody.Document.ID.String()
+	pending := performJSONRequest(http.MethodGet, docPath, "", server)
+	require.Equal(t, http.StatusOK, pending.Code)
+	var pendingDoc uploadask.Document
+	require.NoError(t, json.Unmarshal(pending.Body.Bytes(), &pendingDoc))
+	require.Equal(t, uploadask.DocumentStatusPending, pendingDoc.Status)
+
+	require.NoError(t, uploadSvc.ProcessDocument(context.Background(), uploadBody.Document.ID, 1))
+
+	processed := performJSONRequest(http.MethodGet, docPath, "", server)
+	require.Equal(t, http.StatusOK, processed.Code)
+	var processedDoc uploadask.Document
+	require.NoError(t, json.Unmarshal(processed.Body.Bytes(), &processedDoc))
+	require.Equal(t, uploadask.DocumentStatusProcessed, processedDoc.Status)
+	require.Nil(t, processedDoc.FailureReason)
+
+	list := performJSONRequest(http.MethodGet, "/api/v1/upload-ask/documents?status=processed", "", server)
+	require.Equal(t, http.StatusOK, list.Code)
+	var listBody struct {
+		Items []uploadask.Document `json:"items"`
+	}
+	require.NoError(t, json.Unmarshal(list.Body.Bytes(), &listBody))
+	require.Len(t, listBody.Items, 1)
+	require.Equal(t, uploadBody.Document.ID, listBody.Items[0].ID)
+
+	ask := performJSONRequest(
+		http.MethodPost,
+		"/api/v1/upload-ask/qa/query",
+		`{"query":"What does the local contract mention?","documentIds":["`+uploadBody.Document.ID.String()+`"],"topK":1}`,
+		server,
+	)
+	require.Equal(t, http.StatusOK, ask.Code)
+	var askBody uploadask.AskResponse
+	require.NoError(t, json.Unmarshal(ask.Body.Bytes(), &askBody))
+	require.NotEqual(t, uuid.Nil, askBody.SessionID)
+	require.NotEmpty(t, askBody.Answer)
+	require.GreaterOrEqual(t, askBody.LatencyMs, int64(0))
+	require.GreaterOrEqual(t, askBody.UsedHistoryTokens, 0)
+	require.Len(t, askBody.Sources, 1)
+	require.Equal(t, uploadBody.Document.ID, askBody.Sources[0].DocumentID)
+	require.Equal(t, 0, askBody.Sources[0].ChunkIndex)
+	require.GreaterOrEqual(t, askBody.Sources[0].Score, 0.0)
+	require.Contains(t, askBody.Sources[0].Preview, "Local SQLite")
+
+	sessions := performJSONRequest(http.MethodGet, "/api/v1/upload-ask/qa/sessions", "", server)
+	require.Equal(t, http.StatusOK, sessions.Code)
+	var sessionsBody struct {
+		Sessions []uploadask.QASession `json:"sessions"`
+	}
+	require.NoError(t, json.Unmarshal(sessions.Body.Bytes(), &sessionsBody))
+	require.Len(t, sessionsBody.Sessions, 1)
+	require.Equal(t, askBody.SessionID, sessionsBody.Sessions[0].ID)
+
+	logs := performJSONRequest(http.MethodGet, "/api/v1/upload-ask/qa/sessions/"+askBody.SessionID.String()+"/logs", "", server)
+	require.Equal(t, http.StatusOK, logs.Code)
+	var logsBody struct {
+		Logs []uploadask.QueryLog `json:"logs"`
+	}
+	require.NoError(t, json.Unmarshal(logs.Body.Bytes(), &logsBody))
+	require.Len(t, logsBody.Logs, 1)
+	require.Equal(t, askBody.SessionID, logsBody.Logs[0].SessionID)
+	require.Equal(t, "What does the local contract mention?", logsBody.Logs[0].QueryText)
+	require.NotEmpty(t, logsBody.Logs[0].ResponseText)
+	require.Len(t, logsBody.Logs[0].Sources, 1)
+	require.Equal(t, uploadBody.Document.ID, logsBody.Logs[0].Sources[0].DocumentID)
+}
+
 func TestRouter_Profile(t *testing.T) {
 	authSvc := &stubAuth{
 		validateFn: func(ctx context.Context, token string) (auth.Claims, error) {
@@ -400,6 +494,30 @@ func performJSONRequest(method, path, body string, server *http.Server, opts ...
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	req.Header.Set("X-Forwarded-For", "203.0.113.10")
+	req.RemoteAddr = "203.0.113.1:1234"
+	req.Header.Set("Authorization", "Bearer "+defaultAuthToken)
+	for _, opt := range opts {
+		opt(req)
+	}
+	rec := httptest.NewRecorder()
+	server.Handler.ServeHTTP(rec, req)
+	return rec
+}
+
+func performMultipartUpload(t *testing.T, path string, server *http.Server, filename string, title string, content string, opts ...requestOption) *httptest.ResponseRecorder {
+	t.Helper()
+	var payload bytes.Buffer
+	writer := multipart.NewWriter(&payload)
+	require.NoError(t, writer.WriteField("title", title))
+	part, err := writer.CreateFormFile("file", filename)
+	require.NoError(t, err)
+	_, err = part.Write([]byte(content))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	req := httptest.NewRequest(http.MethodPost, path, &payload)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("X-Forwarded-For", "203.0.113.10")
 	req.RemoteAddr = "203.0.113.1:1234"
 	req.Header.Set("Authorization", "Bearer "+defaultAuthToken)
@@ -548,6 +666,42 @@ func newRouterUnderTest(t *testing.T, summarySvc summarizer.Service, advisorSvc 
 func newTestLogger() *slog.Logger {
 	handler := slog.NewTextHandler(io.Discard, nil)
 	return slog.New(handler)
+}
+
+func newLocalUploadAskServiceForTest() *uploadask.Service {
+	docs := uploadrepo.NewMemoryDocumentRepository()
+	files := uploadrepo.NewMemoryFileRepository()
+	chunks := uploadrepo.NewMemoryChunkRepository(docs)
+	sessions := uploadrepo.NewMemoryQASessionRepository()
+	logs := uploadrepo.NewMemoryQueryLogRepository()
+	return uploadask.NewService(
+		uploadask.Config{
+			VectorDim:       32,
+			MaxFileBytes:    1024 * 1024,
+			MaxRetrieved:    3,
+			MaxPreviewChars: 80,
+			Memory: uploadask.MemoryConfig{
+				Enabled:          true,
+				TopKMems:         2,
+				MaxHistoryTokens: 200,
+				MemoryVectorDim:  32,
+				PruneLimit:       20,
+			},
+		},
+		docs,
+		files,
+		chunks,
+		sessions,
+		logs,
+		uploadmemory.NewMemoryMessageLog(),
+		uploadmemory.NewMemoryStore(),
+		uploadstorage.NewMemoryStorage(),
+		uploadembedder.NewDeterministicEmbedder(32),
+		uploadllm.EchoLLM{},
+		uploadchunker.NewSimpleChunker(120, 0),
+		nil,
+		newTestLogger(),
+	)
 }
 
 type stubSummarizer struct {

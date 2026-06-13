@@ -147,6 +147,7 @@ All errors use:
 
 Endpoints live under `/api/v1/upload-ask/*` and require auth:
 
+- Local fallback and response-shape contract: [`docs/upload-ask/local-capability-contract.md`](docs/upload-ask/local-capability-contract.md).
 - `POST /documents` (multipart) — upload a file; stored in memory by default, metadata persisted in SQLite locally.
 - `GET /documents` — list documents for the user.
 - `GET /documents/:id` — fetch document metadata.

@@ -42,9 +42,9 @@
         "Missing Postgres, pgvector, Valkey, R2, or embedding credentials are reported as durable capability gaps, not hidden local-only workarounds.",
         "Any smoke check remains deterministic without live external services by default."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P1"
     },
