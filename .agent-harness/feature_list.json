@@ -26,9 +26,9 @@
         "Structured error responses keep the documented error shape.",
         "The verification path avoids live LLM, OAuth, R2, Postgres, or Valkey credentials unless explicitly configured."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P1"
     },

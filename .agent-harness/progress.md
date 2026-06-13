@@ -16,15 +16,17 @@ F007 is complete: Upload & Ask documents, file metadata, chunks, QA sessions, qu
 
 F008 is complete: local setup docs now center SQLite and `./init.sh`/`make run`; Makefile deploy and GCP init are demoted behind explicit legacy targets; GitHub Actions no longer deploys to Cloud Run on main pushes; GCP/R2/Postgres/pgvector/Valkey docs are marked legacy or optional integration references.
 
+F002 is complete: router-level contract smoke coverage now verifies protected route registration across Auth, summarizer, UV advisor, Smart FAQ, and Upload & Ask; missing bearer tokens return structured `unauthorized` errors; representative invalid bearer tokens return structured `invalid_token` errors; and public auth error contracts are covered without live external services.
+
 F009 is complete: the installed hidden harness files and bundled skill template now match the template fix for final role verdict normalization, including `CODING_PASS` / `CODING_FAIL` prompt output, final matching evaluator verdict parsing, provider contradiction docs, and unit regression tests.
 
 ## Last Completed Feature
 
-F008 Local-only runtime cleanup.
+F002 Protected API contract smoke coverage.
 
 ## Next Feature
 
-F002 Protected API contract smoke coverage.
+F003 Upload Ask local capability contract.
 
 ## Known Issues
 

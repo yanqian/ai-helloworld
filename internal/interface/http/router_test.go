@@ -202,8 +202,99 @@ func TestRouter_ProtectedRequiresAuth(t *testing.T) {
 	recorder := performJSONRequest(http.MethodPost, "/api/v1/summaries", `{"text":"hello"}`, server, withoutAuth())
 	require.Equal(t, http.StatusUnauthorized, recorder.Code)
 
-	errBody := decodeErrorBody(t, recorder.Body.Bytes())
+	errBody := assertStructuredError(t, recorder.Body.Bytes())
 	require.Equal(t, "unauthorized", errBody["error"]["code"])
+}
+
+func TestRouter_ProtectedContractSmokeRejectsMissingAuth(t *testing.T) {
+	server := newRouterUnderTest(t, &stubSummarizer{}, nil, nil, nil, nil)
+	documentID := "11111111-1111-1111-1111-111111111111"
+	sessionID := "22222222-2222-2222-2222-222222222222"
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{name: "auth profile", method: http.MethodGet, path: "/api/v1/auth/me"},
+		{name: "auth logout", method: http.MethodPost, path: "/api/v1/auth/logout"},
+		{name: "summarizer sync", method: http.MethodPost, path: "/api/v1/summaries", body: `{"text":"hello"}`},
+		{name: "summarizer stream", method: http.MethodPost, path: "/api/v1/summaries/stream", body: `{"text":"hello"}`},
+		{name: "uv advice", method: http.MethodPost, path: "/api/v1/uv-advice", body: `{"date":"2026-06-13"}`},
+		{name: "faq search", method: http.MethodPost, path: "/api/v1/faq/search", body: `{"question":"hello"}`},
+		{name: "faq trending", method: http.MethodGet, path: "/api/v1/faq/trending"},
+		{name: "upload document", method: http.MethodPost, path: "/api/v1/upload-ask/documents"},
+		{name: "upload document list", method: http.MethodGet, path: "/api/v1/upload-ask/documents"},
+		{name: "upload document get", method: http.MethodGet, path: "/api/v1/upload-ask/documents/" + documentID},
+		{name: "upload qa query", method: http.MethodPost, path: "/api/v1/upload-ask/qa/query", body: `{"query":"hello"}`},
+		{name: "upload qa sessions", method: http.MethodGet, path: "/api/v1/upload-ask/qa/sessions"},
+		{name: "upload qa session logs", method: http.MethodGet, path: "/api/v1/upload-ask/qa/sessions/" + sessionID + "/logs"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := performJSONRequest(tc.method, tc.path, tc.body, server, withoutAuth())
+			require.Equal(t, http.StatusUnauthorized, recorder.Code)
+			errBody := assertStructuredError(t, recorder.Body.Bytes())
+			require.Equal(t, "unauthorized", errBody["error"]["code"])
+		})
+	}
+}
+
+func TestRouter_ProtectedContractSmokeRejectsInvalidBearerToken(t *testing.T) {
+	server := newRouterUnderTest(t, &stubSummarizer{}, nil, nil, nil, nil)
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{name: "auth profile", method: http.MethodGet, path: "/api/v1/auth/me"},
+		{name: "summarizer sync", method: http.MethodPost, path: "/api/v1/summaries", body: `{"text":"hello"}`},
+		{name: "uv advice", method: http.MethodPost, path: "/api/v1/uv-advice", body: `{"date":"2026-06-13"}`},
+		{name: "faq search", method: http.MethodPost, path: "/api/v1/faq/search", body: `{"question":"hello"}`},
+		{name: "upload qa query", method: http.MethodPost, path: "/api/v1/upload-ask/qa/query", body: `{"query":"hello"}`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := performJSONRequest(tc.method, tc.path, tc.body, server, withAuthToken("invalid-token"))
+			require.Equal(t, http.StatusForbidden, recorder.Code)
+			errBody := assertStructuredError(t, recorder.Body.Bytes())
+			require.Equal(t, "invalid_token", errBody["error"]["code"])
+		})
+	}
+}
+
+func TestRouter_PublicAuthContractSmoke(t *testing.T) {
+	server := newRouterUnderTest(t, &stubSummarizer{}, nil, nil, &stubAuth{
+		loginFn: func(ctx context.Context, req auth.LoginRequest) (auth.LoginResponse, error) {
+			return auth.LoginResponse{}, apperrors.Wrap("invalid_credentials", "invalid email or password", nil)
+		},
+		refreshFn: func(ctx context.Context, token string) (auth.LoginResponse, error) {
+			return auth.LoginResponse{}, apperrors.Wrap("invalid_token", "expired", nil)
+		},
+	}, nil)
+	cases := []struct {
+		name       string
+		path       string
+		body       string
+		wantStatus int
+		wantCode   string
+	}{
+		{name: "register invalid payload", path: "/api/v1/auth/register", body: `{"email":123}`, wantStatus: http.StatusBadRequest, wantCode: "invalid_request"},
+		{name: "login invalid credentials", path: "/api/v1/auth/login", body: `{"email":"user@example.com","password":"wrong"}`, wantStatus: http.StatusUnauthorized, wantCode: "invalid_credentials"},
+		{name: "refresh invalid token", path: "/api/v1/auth/refresh", body: `{"refreshToken":"expired"}`, wantStatus: http.StatusUnauthorized, wantCode: "invalid_token"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := performJSONRequest(http.MethodPost, tc.path, tc.body, server, withoutAuth())
+			require.Equal(t, tc.wantStatus, recorder.Code)
+			errBody := assertStructuredError(t, recorder.Body.Bytes())
+			require.Equal(t, tc.wantCode, errBody["error"]["code"])
+		})
+	}
 }
 
 func TestRouter_Profile(t *testing.T) {
@@ -581,5 +672,14 @@ func decodeErrorBody(t *testing.T, raw []byte) map[string]map[string]string {
 	t.Helper()
 	var body map[string]map[string]string
 	require.NoError(t, json.Unmarshal(raw, &body))
+	return body
+}
+
+func assertStructuredError(t *testing.T, raw []byte) map[string]map[string]string {
+	t.Helper()
+	body := decodeErrorBody(t, raw)
+	require.Contains(t, body, "error")
+	require.NotEmpty(t, body["error"]["code"])
+	require.NotEmpty(t, body["error"]["message"])
 	return body
 }
