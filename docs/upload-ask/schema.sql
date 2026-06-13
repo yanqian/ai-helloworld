@@ -1,4 +1,8 @@
--- Upload & Ask schema (PostgreSQL + pgvector)
+-- Upload & Ask schema (legacy PostgreSQL + pgvector reference)
+--
+-- Current local runtime uses the idempotent SQLite migrations in
+-- internal/infra/sqlite/db.go. Keep this file only for optional legacy or
+-- production-like Postgres integration work.
 -- Adjust VECTOR DIMENSION to match uploadAsk.vectorDim (default 1536).
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

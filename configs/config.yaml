@@ -38,8 +38,8 @@ faq:
     addr: "" # set in the environment variable FAQ_REDIS_ADDR in production
   postgres:
     dsn: "" # set in the environment variable FAQ_POSTGRES_DSN in production
-    maxConns: 10 # keep below Cloud SQL limits while handling concurrent traffic
-    minConns: 2  # keep a couple of warm connections for faster cold starts
+    maxConns: 10 # optional legacy/integration Postgres pool size
+    minConns: 2
 llm:
   apiKey: ""
   baseUrl: "https://api.openai.com/v1"
@@ -72,10 +72,10 @@ uploadAsk:
     summaryEveryNTurns: 0
     pruneLimit: 200
   storage:
-    endpoint: "https://ba25d2c1325108cb0a84ce55b2b8d10e.r2.cloudflarestorage.com" # set via R2_ENDPOINT or UPLOADASK_STORAGE_ENDPOINT
+    endpoint: "" # optional R2/S3 endpoint via R2_ENDPOINT or UPLOADASK_STORAGE_ENDPOINT
     accessKey: "" # set via R2_ACCESS_KEY
     secretKey: "" # set via R2_SECRET_KEY
-    bucket: "upload-ask-prod" # set via R2 bucket name
+    bucket: "" # optional R2/S3 bucket
     region: "" # optional
   redis:
     enabled: false

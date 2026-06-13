@@ -1,4 +1,6 @@
-# Upload-and-Ask Specification (Postgres-first, R2/Supabase-ready)
+# Upload-and-Ask Specification (legacy Postgres/R2 design)
+
+> Current local runtime note: the backend is now local-first and uses SQLite for Upload & Ask documents, files, chunks, sessions, query logs, messages, and memories. This document is retained as a legacy/integration design reference for Postgres + pgvector and R2/Supabase paths, not as the default local setup.
 
 Goal: deliver a cheap, incremental workflow to upload files, embed them, and answer questions with a clean architecture that swaps storage/LLM/embedding providers easily.
 

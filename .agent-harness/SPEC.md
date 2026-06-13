@@ -13,7 +13,7 @@ Maintain a recoverable Go HTTP API for the AI Helloworld product. The backend pr
 - Summarization endpoints, including sync JSON responses and Server-Sent Events streaming.
 - Singapore UV advice powered by the data.gov.sg UV source and an OpenAI-compatible chat model.
 - Smart FAQ search using exact, semantic hash, similarity, and hybrid strategies with cache-backed trending queries.
-- Upload & Ask document ingestion, object storage, chunking, embeddings, pgvector retrieval, QA sessions, query logs, and optional conversational memory.
+- Upload & Ask document ingestion, object storage, chunking, embeddings, local SQLite retrieval, QA sessions, query logs, and optional conversational memory.
 - Configuration through `configs/config.yaml` and environment variables.
 - Local and CI verification through Go tests, focused smoke checks, and the AI Agent Harness recovery protocol.
 
@@ -36,7 +36,7 @@ Maintain a recoverable Go HTTP API for the AI Helloworld product. The backend pr
 
 - Protected business endpoints require bearer-token authentication.
 - `LLM_API_KEY` is required for real chat and embedding calls; tests should avoid depending on live credentials unless explicitly scoped.
-- Upload & Ask persistence requires Postgres with pgvector for production-like retrieval; memory fallbacks are for local development only.
+- Upload & Ask persistence uses SQLite for ordinary local development. Postgres with pgvector remains an optional legacy/integration path rather than a default requirement.
 - Redis or Valkey queues are optional; the service must still be understandable and testable without them.
 - Verification must not rely on chat history or hidden agent memory.
 
@@ -51,7 +51,7 @@ Maintain a recoverable Go HTTP API for the AI Helloworld product. The backend pr
 - Go 1.24-compatible toolchain.
 - Local build and test cache outside committed source.
 - Optional OpenAI-compatible API credentials for live AI flows.
-- Optional Postgres + pgvector, Valkey/Redis, Cloudflare R2, and Google OAuth credentials for production-like integration work.
+- Optional Postgres + pgvector, Valkey/Redis, Cloudflare R2, GCP, and Google OAuth credentials for legacy or production-like integration work.
 - Agent provider configuration before `make work` can run real unattended Coding Agent or Evaluator Agent adapters.
 
 ### Implementation Paths

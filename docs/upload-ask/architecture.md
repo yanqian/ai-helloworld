@@ -1,5 +1,7 @@
 # Upload & Ask Architecture
 
+> Current local runtime note: Upload & Ask now persists locally through SQLite and in-memory blob storage by default. Postgres/pgvector, Valkey/Redis, and R2 remain optional legacy/integration adapters.
+
 ```mermaid
 flowchart LR
     subgraph Client [Client]

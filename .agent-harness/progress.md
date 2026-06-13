@@ -14,19 +14,21 @@ F006 is complete: Smart FAQ questions, embeddings, semantic hashes, cached answe
 
 F007 is complete: Upload & Ask documents, file metadata, chunks, QA sessions, query logs, conversation messages, and long-term memories now persist through SQLite in local mode. Local chunk and memory similarity search runs deterministically in Go over JSON-stored embeddings, and provider wiring selects SQLite before Postgres or memory fallbacks.
 
+F008 is complete: local setup docs now center SQLite and `./init.sh`/`make run`; Makefile deploy and GCP init are demoted behind explicit legacy targets; GitHub Actions no longer deploys to Cloud Run on main pushes; GCP/R2/Postgres/pgvector/Valkey docs are marked legacy or optional integration references.
+
 F009 is complete: the installed hidden harness files and bundled skill template now match the template fix for final role verdict normalization, including `CODING_PASS` / `CODING_FAIL` prompt output, final matching evaluator verdict parsing, provider contradiction docs, and unit regression tests.
 
 ## Last Completed Feature
 
-F007 Upload Ask SQLite persistence.
+F008 Local-only runtime cleanup.
 
 ## Next Feature
 
-F008 Local-only runtime cleanup.
+F002 Protected API contract smoke coverage.
 
 ## Known Issues
 
-- New local-first SQLite requirement has F005-F007 complete. F008 should clean up local runtime docs and legacy deployment defaults.
+- Local-first SQLite requirement has F005-F008 complete. Remaining recovery work returns to API contract coverage and cross-repository alignment.
 - Real LLM and optional Google OAuth verification still require explicit credentials.
 - Remote Postgres, pgvector, Valkey, R2, and GCP deployment are no longer desired for ordinary local operation, but existing adapters remain until local replacements are complete.
 - `modernc.org/sqlite` raised the Go directive to 1.25; current local verification uses Go 1.26.

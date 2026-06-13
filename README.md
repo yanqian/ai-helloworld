@@ -1,14 +1,14 @@
 # Backend Service
 
-Go HTTP service that powers summarization, UV advice, Smart FAQ, and Upload & Ask (pgvector-backed RAG). It exposes endpoints under `/api/v1`.
+Go HTTP service that powers summarization, UV advice, Smart FAQ, and Upload & Ask. The default developer workflow is local-first: Auth, Smart FAQ, and Upload & Ask persistence use SQLite under `data/` without GCP, Cloud Run, remote Postgres, pgvector, Valkey, or R2.
 
 ## Getting Started
 
 ```bash
-# Install deps (Go 1.23+)
-go mod download
+# Verify the local recovery contract.
+./init.sh
 
-# Export required env vars
+# Optional: enable real LLM-backed answers.
 export LLM_API_KEY=sk-your-openai-key
 export JWT_SECRET=replace-this-with-a-secure-secret
 # Optional tweaks:
@@ -16,11 +16,13 @@ export JWT_SECRET=replace-this-with-a-secure-secret
 # export LLM_MODEL=gpt-4o-mini
 # export LOG_LEVEL=debug
 
-# Start the server
+# Start the server. This creates data/ai-helloworld.db when SQLite is enabled.
 make run
 ```
 
-Configuration values come from environment variables, `configs/config.yaml`, or sane defaults (`internal/infra/config`). At minimum you must set `LLM_API_KEY` so the service can reach OpenAI/ChatGPT. UV advice relies on `UV_API_BASE_URL` (defaults to data.gov.sg) and can be fine-tuned via `UV_PROMPT`. Upload & Ask requires Postgres + pgvector and optional Valkey/Redis for the background queue.
+Configuration values come from environment variables, `configs/config.yaml`, or defaults in `internal/infra/config`. Local persistence is SQLite by default at `data/ai-helloworld.db`, and SQLite database files are intentionally ignored by git.
+
+`LLM_API_KEY` is only required for real LLM-backed summarization, FAQ answers, embeddings, and Upload & Ask responses. The recovery checks and most local persistence tests run without live AI, OAuth, R2, Postgres, pgvector, Valkey, Redis, or GCP credentials. UV advice uses `UV_API_BASE_URL` (defaults to data.gov.sg) and can be tuned via `UV_PROMPT`.
 
 ## API Usage
 
@@ -133,45 +135,48 @@ All errors use:
 - **Timeouts**: HTTP read/write timeouts are configurable under the `http` section in config; ensure they exceed typical LLM latency and embedding latency.
 - **Protection**: Rate limits (`http.rateLimit`) and retry behavior (`http.retry`) are configurable so you can tune resiliency per environment.
 - **UV Advisor config**: Override `UV_API_BASE_URL` to point at a different data source or `UV_PROMPT` to change how the AI structures advice.
-- **Testing**: Run `GOCACHE=$(pwd)/.gocache go test ./...` to avoid sandbox cache issues.
-- **Re-run upload document processing** (Redis/Valkey queue only): push a job back onto the queue with the document and user IDs:
+- **Testing**: Run `./init.sh` for the repository recovery contract. It uses temporary Go caches and runs `go test ./...`.
+- **Local database**: the default SQLite file is `data/ai-helloworld.db`. Delete it to reset local Auth, FAQ, and Upload & Ask state.
+- **Re-run upload document processing** (legacy Redis/Valkey queue only): push a job back onto the queue with the document and user IDs:
   `redis-cli -u "$UPLOADASK_REDIS_ADDR" LPUSH 'uploadask:jobs' '{"name":"process_document","payload":{"document_id":"<doc-uuid>","user_id":<user-id>}}'`
   If the document is marked `failed`, you can reset it first: `UPDATE upload_documents SET status='pending', failure_reason=NULL WHERE id='<doc-uuid>';`
-- **Trigger a chat summary** (Redis/Valkey queue): enqueue a `summarize_session` job to force a long-term memory summary for a session (memory must be enabled):
+- **Trigger a chat summary** (legacy Redis/Valkey queue): enqueue a `summarize_session` job to force a long-term memory summary for a session (memory must be enabled):
   `redis-cli -u "$UPLOADASK_REDIS_ADDR" LPUSH 'uploadask:jobs' '{"name":"summarize_session","payload":{"session_id":"<session-uuid>","user_id":<user-id>}}'`
 
-## Upload & Ask API (pgvector)
+## Upload & Ask API
 
 Endpoints live under `/api/v1/upload-ask/*` and require auth:
 
-- `POST /documents` (multipart) — upload a file; stored in R2/memory, metadata persisted in Postgres.
+- `POST /documents` (multipart) — upload a file; stored in memory by default, metadata persisted in SQLite locally.
 - `GET /documents` — list documents for the user.
 - `GET /documents/:id` — fetch document metadata.
-- `POST /qa/query` — embed the question, run pgvector similarity over processed chunks, and call the LLM to answer with citations.
+- `POST /qa/query` — embed the question, run local SQLite-backed similarity over processed chunks, and call the LLM to answer with citations.
 - `GET /qa/sessions` — list previous QA sessions.
 - `GET /qa/sessions/:id/logs` — view prior Q/A exchanges.
 
 ### Dependencies
 
-- **Postgres + pgvector**: required for document/chunk storage. The pool registers the `vector` type automatically; pgvector must be installed (`CREATE EXTENSION vector`).
-- **Valkey/Redis** (optional): queues background document processing (`uploadask:jobs` list) and can be disabled to process synchronously.
-- **Object storage**: R2 adapter; falls back to in-memory storage for local dev.
+- **SQLite**: default local persistence for document metadata, file metadata, chunks, QA sessions, query logs, chat messages, and memories.
+- **Valkey/Redis** (legacy optional): queues background document processing (`uploadask:jobs` list). The local default is the immediate in-process queue.
+- **Object storage**: in-memory storage by default for local dev. R2 remains available as an optional legacy/integration adapter.
+- **Postgres + pgvector**: retained as an optional legacy/integration adapter; it is no longer required for ordinary local use.
 
 ### Configuration
 
 Set via `configs/config.yaml` or env:
 
-- `UPLOADASK_POSTGRES_DSN` — Postgres DSN (required for persistence).
-- `UPLOADASK_REDIS_ADDR` — enables Valkey/Redis queue when set.
-- `UPLOADASK_STORAGE_*` — R2 endpoint/access/secret/bucket (otherwise in-memory).
+- `SQLITE_ENABLED` / `SQLITE_PATH` — local persistence toggle and database path; defaults to enabled and `data/ai-helloworld.db`.
+- `UPLOADASK_POSTGRES_DSN` — optional legacy Postgres DSN.
+- `UPLOADASK_REDIS_ENABLED` / `UPLOADASK_REDIS_ADDR` — optional legacy Valkey/Redis queue.
+- `UPLOADASK_STORAGE_*` — optional R2 endpoint/access/secret/bucket; otherwise in-memory.
 - `UPLOADASK_VECTOR_DIM` — embedding vector dimension (defaults to 1536 for `text-embedding-3-small`).
 - `HTTP_WRITE_TIMEOUT` — ensure this exceeds worst-case embed + chat latency; otherwise clients see socket hangups even if the handler finishes.
 
 ### Behavior
 
 1. Upload: store metadata + blob, enqueue processing.
-2. Process: chunk text, embed via OpenAI-compatible embeddings, persist chunks with pgvector, mark document processed.
-3. Query: embed question, search pgvector, return top chunks + LLM answer with inline citations.
+2. Process: chunk text, embed via OpenAI-compatible embeddings, persist chunks in SQLite, mark document processed.
+3. Query: embed question, search SQLite-stored embeddings in-process, return top chunks + LLM answer with inline citations.
 
 ## UV Advisor API
 
@@ -214,11 +219,11 @@ Under the hood the UV advisor uses an OpenAI function call (`get_sg_uv`) so the 
 
 ### POST `/api/v1/faq/search`
 
-Answer a question using one of four lookup strategies (exact, semantic hash, similarity or hybrid). The service checks Redis-backed (or in-memory) caches first, falls back to the LLM if needed, and records the question for the trending list.
+Answer a question using one of four lookup strategies (exact, semantic hash, similarity or hybrid). The local default stores questions, cached answers, and trending counts in SQLite, falls back to the LLM if needed, and records the question for the trending list.
 
 Looking for implementation details? See the [FAQ spec](docs/faq/faq-spec.md) for the ranking heuristics, cache flows, and data contracts shared with the frontend.
 
-Production deployments connect to Aiven-managed Postgres (for long-term FAQ storage) and Valkey/Redis (for the FAQ cache). The defaults in `configs/config.yaml` map directly to that setup—override them only if you run your own databases.
+Legacy/integration deployments can still connect to Postgres and Valkey/Redis, but `configs/config.yaml` now centers the local SQLite path.
 
 ```bash
 curl --location 'http://localhost:8080/api/v1/faq/search' \
@@ -251,7 +256,7 @@ Returns the top 10 most common FAQ searches to power the recommendation list in 
 
 ### FAQ Cache Backend
 
-The Smart FAQ service uses a Valkey/Redis-compatible cache before calling the LLM. Enable it by setting `faq.redis.enabled=true` (see `configs/config.yaml` or the `FAQ_REDIS_*` env vars) and point `faq.redis.addr` at your Valkey connection string. The address may be a raw `host:port` pair or a URL (e.g. `rediss://user:pass@hostname:port/db`).
+The Smart FAQ service uses SQLite locally. A Valkey/Redis-compatible cache remains available for legacy/integration environments; enable it by setting `faq.redis.enabled=true` (see `configs/config.yaml` or the `FAQ_REDIS_*` env vars) and point `faq.redis.addr` at your Valkey connection string. The address may be a raw `host:port` pair or a URL (e.g. `rediss://user:pass@hostname:port/db`).
 
 Environment overrides:
 
@@ -264,9 +269,10 @@ If the cache is unreachable the service automatically falls back to the in-memor
 
 - `cmd/app`: Wire setup, providers, HTTP server entrypoint.
 - `internal/domain`: Core business logic for summarizer, UV advisor, FAQ, auth, and upload-ask.
-- `internal/infra`: Integrations (ChatGPT client, pgvector repos, Valkey queues, R2 storage, config loading).
-  - `uploadask/*`: chunker, embedder, queue, storage, and pgvector repositories.
-  - `faqrepo/*`: FAQ pg/pgvector repository.
+- `internal/infra`: Integrations (ChatGPT client, SQLite/Postgres repositories, Valkey queues, R2 storage, config loading).
+  - `sqlite`: shared local SQLite migrations.
+  - `uploadask/*`: chunker, embedder, queue, storage, SQLite repositories, and optional legacy pgvector repositories.
+  - `faqrepo/*`: FAQ SQLite repository plus optional legacy pg/pgvector repository.
 - `internal/interface/http`: Gin handlers, router, middleware, error handling.
 - `configs/config.yaml`: Default runtime configuration (overridable via env).
 - `docs/`: Specs and schemas (FAQ, upload-ask, login).

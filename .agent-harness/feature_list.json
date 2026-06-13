@@ -125,9 +125,9 @@
         "Root ./init.sh verifies local SQLite capability without remote service credentials.",
         "Docs call out which optional live AI credentials are still needed for real LLM-backed flows."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P1"
     },

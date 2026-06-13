@@ -1,5 +1,7 @@
 # Upload-and-Ask Conversational Memory & Vector Memory Spec
 
+> Current local runtime note: conversational messages and memories now persist in SQLite by default. The Postgres + pgvector sections below are retained for optional legacy/integration deployments.
+
 Goal: add multi-turn memory so Ask can ground answers in recent conversation + long-term vectorized memories alongside document chunks.
 
 ## 1) Objectives

@@ -3,6 +3,12 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
+Legacy Cloud Run setup script.
+
+The backend is now local-first and uses SQLite by default. This script is kept
+only for intentionally exercising the old GCP deployment path. Set
+ALLOW_LEGACY_GCP_SETUP=true before running it.
+
 Usage: scripts/setup_gcp_project.sh <project-id> <billing-account-id> [region] [artifact-repo] [service-name]
 
 Required arguments:
@@ -49,6 +55,13 @@ ensure_command() {
 }
 
 ensure_command "gcloud"
+
+if [[ "${ALLOW_LEGACY_GCP_SETUP:-}" != "true" ]]; then
+  usage
+  echo
+  echo "Refusing to run legacy GCP setup without ALLOW_LEGACY_GCP_SETUP=true."
+  exit 2
+fi
 
 PROJECT_ID=${1:-}
 require_arg "$PROJECT_ID"
@@ -207,7 +220,7 @@ Next steps:
   1. Move/rename $SA_KEY_FILE -> key.json (matches repo expectation) and add it to your secret store (e.g., GitHub Actions secret GCP_SA_KEY).
   2. Update .github/workflows/ci.yml vars (project, region, repo) via GitHub → Settings → Variables.
   3. Update Makefile defaults if the project ID or region changed.
-  4. Run: gcloud config set project $PROJECT_ID && make deploy (optional verification).
+  4. Run: gcloud config set project $PROJECT_ID && make legacy-gcp-deploy (optional legacy verification).
 EOF
 }
 

@@ -1,6 +1,6 @@
 # Cloudflare R2 Setup (step-by-step)
 
-This is a reference to wire R2 as the S3-compatible object store for Upload & Ask. Follow these steps in order; nothing here is Codex-specific.
+This is a legacy/integration reference to wire R2 as the S3-compatible object store for Upload & Ask. Local development uses in-memory blob storage plus SQLite metadata by default and does not require R2.
 
 ## 1) Create bucket
 1. Log in to Cloudflare dashboard → R2.
