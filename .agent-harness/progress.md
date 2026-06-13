@@ -20,19 +20,21 @@ F002 is complete: router-level contract smoke coverage now verifies protected ro
 
 F003 is complete: Upload & Ask now has a durable local capability contract documenting SQLite defaults, memory blob storage, immediate queues, deterministic embeddings, Echo LLM, legacy Postgres/pgvector/R2/Valkey capability gaps, and frontend-sensitive response shapes. A deterministic HTTP smoke covers upload response metadata, pending-to-processed status, document listing, QA session creation, citation sources, and query log shapes without live external services.
 
+F004 is complete: the backend records the sibling frontend path `/Users/armstrong/Project/ai-helloworld-fe`, shared API surfaces, and contract-sensitive fields in durable API contract docs and SPEC notes. A reflection-based JSON tag drift guard now protects frontend-sensitive fields, and the sibling frontend repository has matching `docs/api-contract.md` notes.
+
 F009 is complete: the installed hidden harness files and bundled skill template now match the template fix for final role verdict normalization, including `CODING_PASS` / `CODING_FAIL` prompt output, final matching evaluator verdict parsing, provider contradiction docs, and unit regression tests.
 
 ## Last Completed Feature
 
-F003 Upload Ask local capability contract.
+F004 Cross repository API contract alignment.
 
 ## Next Feature
 
-F004 Cross repository API contract alignment.
+None.
 
 ## Known Issues
 
-- Local-first SQLite requirement has F005-F008 complete. Remaining recovery work returns to API contract coverage and cross-repository alignment.
+- Local-first SQLite requirement and backend recovery feature list are complete.
 - Real LLM and optional Google OAuth verification still require explicit credentials.
 - Remote Postgres, pgvector, Valkey, R2, and GCP deployment are no longer desired for ordinary local operation, but existing adapters remain until local replacements are complete.
 - `modernc.org/sqlite` raised the Go directive to 1.25; current local verification uses Go 1.26.

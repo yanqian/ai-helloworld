@@ -2,6 +2,8 @@
 
 Go HTTP service that powers summarization, UV advice, Smart FAQ, and Upload & Ask. The default developer workflow is local-first: Auth, Smart FAQ, and Upload & Ask persistence use SQLite under `data/` without GCP, Cloud Run, remote Postgres, pgvector, Valkey, or R2.
 
+Shared frontend/backend API contract notes live in [`docs/api-contract.md`](docs/api-contract.md). The sibling frontend repository is `/Users/armstrong/Project/ai-helloworld-fe`.
+
 ## Getting Started
 
 ```bash

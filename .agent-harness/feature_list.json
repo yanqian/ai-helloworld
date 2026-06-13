@@ -58,9 +58,9 @@
         "A verification step or fixture catches drift for routes used by the frontend.",
         "The frontend sibling repository receives matching contract notes or feature entries."
       ],
-      "passes": false,
-      "status": "todo",
-      "attempts": 0,
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
       "last_error": "",
       "priority": "P2"
     },

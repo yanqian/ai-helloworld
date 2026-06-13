@@ -152,6 +152,15 @@ Make the backend a local-first application that can run on a developer machine w
 - Later feature tests for FAQ and Upload & Ask persistence.
 - `git status --short` should keep SQLite database files untracked/ignored.
 
+## Cross Repository API Contract
+
+- Sibling frontend repository: `/Users/armstrong/Project/ai-helloworld-fe`.
+- Durable backend contract notes live in `docs/api-contract.md`.
+- Durable frontend matching notes should live in `/Users/armstrong/Project/ai-helloworld-fe/docs/api-contract.md`.
+- Shared API surfaces include Auth, summarizer sync and stream, UV advisor, Smart FAQ, and Upload & Ask document/session/query routes.
+- Contract-sensitive JSON fields include `refreshToken`, `durationMs`, `tokenUsage`, `sessionId`, `partial_summary`, `documentId`, `chunkIndex`, `score`, `preview`, and `failureReason`.
+- Backend drift verification includes `TestFrontendContractJSONFields`, router protected contract smoke coverage, and Upload & Ask local contract smoke coverage.
+
 ## Harness Governance
 
 ### Skill Assisted Workflow
