@@ -200,6 +200,24 @@
       "attempts": 2,
       "last_error": "",
       "priority": "P0"
+    },
+    {
+      "id": "F013",
+      "title": "Sync provider runtime preflight",
+      "description": "Update the installed hidden AI Agent Harness files so configured agent providers can run optional runtime checks and report permission gaps before feature state is mutated.",
+      "acceptance": [
+        "Installed provider configuration supports runtime_check_command, coding_runtime_check_command, and evaluator_runtime_check_command entries.",
+        "Installed run-agent-provider preflight emits PROVIDER_RUNTIME_PERMISSION_REQUIRED for permission-like provider runtime failures.",
+        "Installed docs explain that the outer agent or user must explicitly approve escalated provider runtime execution.",
+        "Codex has a documented runtime-check example while Claude Code, Cursor Agent, and custom providers retain equivalent entry points without guessed command shapes.",
+        "Installed unit tests cover runtime check success, permission-required failure, and role-specific runtime check selection.",
+        "Root ./init.sh passes after synchronization."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
     }
   ]
 }

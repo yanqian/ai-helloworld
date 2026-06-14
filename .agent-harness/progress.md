@@ -30,10 +30,12 @@ F011 is complete: SQLite Auth user and identity scans now parse both current RFC
 
 F012 is complete: Upload & Ask SQLite repository and memory scans now parse both current RFC3339Nano timestamps and legacy/database-style timestamp text such as `2025-12-05 15:06:46.339153+00`, while invalid timestamp strings still return explicit parse errors. Focused regression coverage protects document, file, chunk, QA session, query log, message, and memory reads.
 
+F013 is complete: the installed hidden harness now supports provider runtime preflight checks, permission-required escalation markers, and vendor-neutral runtime check entries for Codex, Claude Code, Cursor Agent, and custom providers.
+
 
 ## Last Completed Feature
 
-F012 Upload Ask SQLite timestamp compatibility.
+F013 Sync provider runtime preflight.
 
 ## Next Feature
 
@@ -54,8 +56,11 @@ None.
 - `make work` for F012 hit the same Codex provider runtime permission failure before business coding; manual fallback completed F012 with durable evaluator evidence.
 
 
+- F013 syncs the template provider runtime preflight fix so future provider permission gaps can stop before feature attempts are mutated and ask the outer agent or user for explicit escalation.
+
 ## Recovery Notes
 
 - F006 had repeated orchestrator failure records from provider exit-code contradictions despite durable implementation and evaluator pass evidence.
 - The template fix was verified in `/Users/armstrong/Project/ai-agent-harness-template` as F033 before synchronizing installed files here.
 - Root `./init.sh` passed after the installed harness synchronization.
+- The template provider runtime preflight fix was verified in `/Users/armstrong/Project/ai-agent-harness-template` as F034 before synchronizing installed files here as F013.

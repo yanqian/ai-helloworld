@@ -303,6 +303,94 @@ class ScriptUnitTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("provider received: hello evaluator", result.stdout)
 
+    def test_agent_provider_runtime_check_runs_when_configured(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            marker = Path(tmp_dir) / "runtime.marker"
+            checker = Path(tmp_dir) / "checker.py"
+            checker.write_text(
+                "import sys\n"
+                "from pathlib import Path\n"
+                "prompt = sys.stdin.read()\n"
+                f"Path({str(marker)!r}).write_text(prompt)\n"
+            )
+            config = Path(tmp_dir) / "agent-provider.json"
+            config.write_text(json.dumps({
+                "provider": "custom",
+                "providers": {
+                    "custom": {
+                        "command": [sys.executable, str(checker)],
+                        "runtime_check_command": [sys.executable, str(checker)],
+                    }
+                }
+            }))
+            env = {"HARNESS_AGENT_PROVIDER_CONFIG": str(config)}
+
+            result = run_command([sys.executable, "scripts/run-agent-provider.py", "--role", "coding", "--check"], env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("agent_provider_check=ok", result.stdout)
+            self.assertIn("agent_provider_runtime_check=ok role=coding provider=custom", result.stdout)
+            self.assertEqual(marker.read_text(), "Reply exactly: PROVIDER_CHECK_OK\n")
+
+    def test_agent_provider_runtime_check_reports_permission_required(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            provider = Path(tmp_dir) / "provider.py"
+            provider.write_text("print('provider ok')\n")
+            checker = Path(tmp_dir) / "checker.py"
+            checker.write_text(
+                "import sys\n"
+                "print('/Users/example/.codex/state_5.sqlite: Operation not permitted', file=sys.stderr)\n"
+                "raise SystemExit(1)\n"
+            )
+            config = Path(tmp_dir) / "agent-provider.json"
+            config.write_text(json.dumps({
+                "provider": "custom",
+                "providers": {
+                    "custom": {
+                        "command": [sys.executable, str(provider)],
+                        "runtime_check_command": [sys.executable, str(checker)],
+                    }
+                }
+            }))
+            env = {"HARNESS_AGENT_PROVIDER_CONFIG": str(config)}
+
+            result = run_command([sys.executable, "scripts/run-agent-provider.py", "--role", "evaluator", "--check"], env=env)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("PROVIDER_RUNTIME_PERMISSION_REQUIRED", result.stderr)
+            self.assertIn("provider=custom role=evaluator", result.stderr)
+            self.assertIn("approve escalated provider runtime execution", result.stderr)
+
+    def test_agent_provider_runtime_check_supports_role_specific_commands(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            provider = Path(tmp_dir) / "provider.py"
+            provider.write_text("print('provider ok')\n")
+            coding_marker = Path(tmp_dir) / "coding.marker"
+            evaluator_marker = Path(tmp_dir) / "evaluator.marker"
+            coding_checker = Path(tmp_dir) / "coding_checker.py"
+            coding_checker.write_text(f"from pathlib import Path\nPath({str(coding_marker)!r}).write_text('coding')\n")
+            evaluator_checker = Path(tmp_dir) / "evaluator_checker.py"
+            evaluator_checker.write_text(f"from pathlib import Path\nPath({str(evaluator_marker)!r}).write_text('evaluator')\n")
+            config = Path(tmp_dir) / "agent-provider.json"
+            config.write_text(json.dumps({
+                "provider": "custom",
+                "providers": {
+                    "custom": {
+                        "command": [sys.executable, str(provider)],
+                        "coding_runtime_check_command": [sys.executable, str(coding_checker)],
+                        "evaluator_runtime_check_command": [sys.executable, str(evaluator_checker)],
+                    }
+                }
+            }))
+            env = {"HARNESS_AGENT_PROVIDER_CONFIG": str(config)}
+
+            coding = run_command([sys.executable, "scripts/run-agent-provider.py", "--role", "coding", "--check"], env=env)
+            self.assertEqual(coding.returncode, 0, coding.stderr)
+            self.assertEqual(coding_marker.read_text(), "coding")
+            self.assertFalse(evaluator_marker.exists())
+
+            evaluator = run_command([sys.executable, "scripts/run-agent-provider.py", "--role", "evaluator", "--check"], env=env)
+            self.assertEqual(evaluator.returncode, 0, evaluator.stderr)
+            self.assertEqual(evaluator_marker.read_text(), "evaluator")
+
     def test_orchestrator_evaluator_result_uses_final_matching_verdict(self):
         orchestrator = load_orchestrator()
         result = subprocess.CompletedProcess(

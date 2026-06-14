@@ -3,19 +3,23 @@
   "providers": {
     "codex": {
       "command": ["codex", "exec", "-"],
-      "verified": "2026-06-05: `codex exec --help` says instructions are read from stdin when PROMPT is omitted or `-` is used."
+      "runtime_check_command": ["codex", "exec", "--ephemeral", "Reply exactly: PROVIDER_CHECK_OK"],
+      "verified": "2026-06-13: `codex exec --help` says instructions are read from stdin when PROMPT is omitted or `-` is used, and documents --ephemeral for runs without persisted session files. Runtime checks may still require user-approved escalation when Codex needs access to CODEX_HOME state or app-server resources."
     },
     "claude-code": {
       "command": [],
-      "verified": "Configure only after verifying the local Claude Code CLI command, stdin behavior, output, and exit-code semantics."
+      "runtime_check_command": [],
+      "verified": "Configure only after verifying the local Claude Code CLI command, stdin behavior, output, exit-code semantics, and runtime permission behavior."
     },
     "cursor-agent": {
       "command": [],
-      "verified": "Configure only after verifying the local Cursor Agent CLI command, stdin behavior, output, and exit-code semantics."
+      "runtime_check_command": [],
+      "verified": "Configure only after verifying the local Cursor Agent CLI command, stdin behavior, output, exit-code semantics, and runtime permission behavior."
     },
     "custom": {
       "command": [],
-      "verified": "Set command to a non-empty string array after verifying the provider accepts prompts on stdin and returns meaningful exit codes."
+      "runtime_check_command": [],
+      "verified": "Set command and runtime_check_command to non-empty string arrays after verifying the provider accepts prompts on stdin, returns meaningful exit codes, and can access required runtime state."
     }
   }
 }

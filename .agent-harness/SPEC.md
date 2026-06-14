@@ -351,3 +351,27 @@ Completed features must have durable evaluator evidence. From the evaluator-evid
 ### Feature-Linked Commits
 
 Approved feature commits must start with `Fxxx <Action> <concise summary>` and reference feature IDs that exist in `feature_list.json`. Use `No-feature:` only for explicitly non-feature work.
+
+## Harness Provider Runtime Preflight
+
+### Goal
+
+Keep orchestrator-first work usable from agent-driven workflows by detecting provider runtime permission gaps before feature state is mutated.
+
+### Included Scope
+
+- Sync provider runtime preflight support from the AI Agent Harness template.
+- Support `runtime_check_command`, `coding_runtime_check_command`, and `evaluator_runtime_check_command` in installed provider configuration.
+- Emit `PROVIDER_RUNTIME_PERMISSION_REQUIRED` when provider runtime checks hit permission-like failures such as Codex state-file or app-server access denial.
+- Preserve equivalent entry points for Codex, Claude Code, Cursor Agent, and custom providers without guessing unverified provider command shapes.
+
+### Excluded Scope
+
+- Automatically escalating permissions.
+- Parsing private provider task-complete schemas.
+- Changing backend product behavior.
+
+### Verification Surface
+
+- Root `./init.sh` after synchronizing the installed harness files.
+- Installed harness unit tests for runtime preflight pass, permission-required failure, and role-specific runtime check selection.
