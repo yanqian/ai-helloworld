@@ -32,10 +32,12 @@ F012 is complete: Upload & Ask SQLite repository and memory scans now parse both
 
 F013 is complete: the installed hidden harness now supports provider runtime preflight checks, permission-required escalation markers, and vendor-neutral runtime check entries for Codex, Claude Code, Cursor Agent, and custom providers.
 
+F014 is complete: local SQLite Smart FAQ now uses `questions` as the canonical question table, adds/backfills `created_at` on legacy `questions`, migrates rows from `faq_questions`, rebuilds `faq_answer_cache` with a foreign key to `questions(id)`, and drops `faq_questions`. The schema audit also recorded the separate empty Auth naming split `user_identities` versus `auth_identities` without changing Auth in this feature.
+
 
 ## Last Completed Feature
 
-F013 Sync provider runtime preflight.
+F014 Unify SQLite FAQ questions table.
 
 ## Next Feature
 
@@ -54,6 +56,8 @@ None.
 - Upload & Ask rows may contain legacy/database-style timestamp text such as `2025-12-05 15:06:46.339153+00`; F012 makes Upload & Ask SQLite reads compatible while preserving explicit errors for invalid timestamps.
 - `make work` for F011 invoked the orchestrator successfully but the Codex provider failed before coding because it could not write `/Users/armstrong/.codex/state_5.sqlite` and could not initialize the in-process app-server client. Manual fallback completed F011 with durable evaluator evidence.
 - `make work` for F012 hit the same Codex provider runtime permission failure before business coding; manual fallback completed F012 with durable evaluator evidence.
+- Local SQLite Smart FAQ table naming is unified on `questions` as of F014; older `faq_questions` tables are migrated and dropped during SQLite startup.
+- Schema audit also found `user_identities` versus `auth_identities`; both are empty in the inspected local DB and this Auth naming difference is out of scope for F014.
 
 
 - F013 syncs the template provider runtime preflight fix so future provider permission gaps can stop before feature attempts are mutated and ask the outer agent or user for explicit escalation.

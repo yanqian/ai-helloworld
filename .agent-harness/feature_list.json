@@ -218,6 +218,26 @@
       "attempts": 1,
       "last_error": "",
       "priority": "P0"
+    },
+    {
+      "id": "F014",
+      "title": "Unify SQLite FAQ questions table",
+      "description": "Make local SQLite Smart FAQ use `questions` as the canonical table, migrate existing `faq_questions` data, add missing `created_at` on legacy `questions`, repoint answer cache foreign keys, drop `faq_questions`, and document the table-name audit.",
+      "acceptance": [
+        "Fresh SQLite initialization creates `questions` with `created_at` and does not create `faq_questions`.",
+        "Existing SQLite databases with a legacy `questions` table gain `created_at` without losing rows.",
+        "Existing SQLite databases with `faq_questions` migrate rows into `questions`, preserve `faq_answer_cache` rows, and drop `faq_questions`.",
+        "SQLite FAQ repository exact lookup, semantic hash lookup, nearest-neighbor lookup, and insert use `questions`.",
+        "SQLite FAQ answer cache foreign key references `questions(id)`.",
+        "Tests cover fresh schema, legacy `questions`, `faq_questions` migration, cache preservation, repository behavior, and store behavior.",
+        "Docs describe `questions` as the local SQLite Smart FAQ table and record that `user_identities`/`auth_identities` is an audited separate Auth naming issue.",
+        "Focused tests and root `./init.sh` pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0"
     }
   ]
 }

@@ -228,11 +228,11 @@ Under the hood the UV advisor uses an OpenAI function call (`get_sg_uv`) so the 
 
 ### POST `/api/v1/faq/search`
 
-Answer a question using one of four lookup strategies (exact, semantic hash, similarity or hybrid). The local default stores questions, cached answers, and trending counts in SQLite, falls back to the LLM if needed, and records the question for the trending list.
+Answer a question using one of four lookup strategies (exact, semantic hash, similarity or hybrid). The local default stores questions in the SQLite `questions` table, cached answers in `faq_answer_cache`, and trending counts in `faq_trending_queries`; it falls back to the LLM if needed and records the question for the trending list.
 
 Looking for implementation details? See the [FAQ spec](docs/faq/faq-spec.md) for the ranking heuristics, cache flows, and data contracts shared with the frontend.
 
-Legacy/integration deployments can still connect to Postgres and Valkey/Redis, but `configs/config.yaml` now centers the local SQLite path.
+Legacy/integration deployments can still connect to Postgres and Valkey/Redis, but `configs/config.yaml` now centers the local SQLite path. Older local databases that contain `faq_questions` are migrated into `questions` and the legacy table is dropped during SQLite startup. A separate schema audit found the Auth naming split `user_identities` versus `auth_identities`; that belongs to Auth cleanup, not the Smart FAQ table unification.
 
 ```bash
 curl --location 'http://localhost:8080/api/v1/faq/search' \

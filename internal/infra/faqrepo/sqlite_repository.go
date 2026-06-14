@@ -26,7 +26,7 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 func (r *SQLiteRepository) FindExact(ctx context.Context, question string) (faq.QuestionRecord, bool, error) {
 	return scanSQLiteQuestion(r.db.QueryRowContext(ctx, `
 		SELECT id, question_text, semantic_hash
-		FROM faq_questions
+		FROM questions
 		WHERE question_text = ?
 		LIMIT 1
 	`, question))
@@ -39,7 +39,7 @@ func (r *SQLiteRepository) FindBySemanticHash(ctx context.Context, hash uint64) 
 	}
 	return scanSQLiteQuestion(r.db.QueryRowContext(ctx, `
 		SELECT id, question_text, semantic_hash
-		FROM faq_questions
+		FROM questions
 		WHERE semantic_hash = ?
 		ORDER BY id
 		LIMIT 1
@@ -50,7 +50,7 @@ func (r *SQLiteRepository) FindBySemanticHash(ctx context.Context, hash uint64) 
 func (r *SQLiteRepository) FindNearest(ctx context.Context, embedding []float32) (faq.SimilarityMatch, bool, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, question_text, semantic_hash, embedding
-		FROM faq_questions
+		FROM questions
 		ORDER BY id
 	`)
 	if err != nil {
@@ -97,7 +97,7 @@ func (r *SQLiteRepository) InsertQuestion(ctx context.Context, question string, 
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	res, err := r.db.ExecContext(ctx, `
-		INSERT INTO faq_questions (question_text, embedding, semantic_hash, created_at)
+		INSERT INTO questions (question_text, embedding, semantic_hash, created_at)
 		VALUES (?, ?, ?, ?)
 	`, question, string(payload), hashValue, now)
 	if err != nil {

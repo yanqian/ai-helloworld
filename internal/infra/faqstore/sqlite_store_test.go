@@ -78,7 +78,7 @@ func insertFAQQuestion(t *testing.T, ctx context.Context, db interface {
 }, id int64, question string) {
 	t.Helper()
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO faq_questions (id, question_text, embedding, created_at)
+		INSERT INTO questions (id, question_text, embedding, created_at)
 		VALUES (?, ?, ?, ?)
 	`, id, question, "[]", time.Now().UTC().Format(time.RFC3339Nano))
 	require.NoError(t, err)

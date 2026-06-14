@@ -324,6 +324,71 @@ Ensure Upload & Ask frontend flows keep working when local SQLite Upload & Ask r
 - `go test -count=1 ./internal/infra/uploadask/repo ./internal/infra/uploadask/memory`.
 - Root `./init.sh` continues to pass.
 
+## SQLite FAQ Questions Table Unification
+
+### Goal
+
+Make the local SQLite Smart FAQ schema use the same canonical `questions` table name as the FAQ/Postgres repository so developers do not need to know two physical table names for the same domain concept.
+
+### Included Scope
+
+- Change the SQLite Smart FAQ question repository from `faq_questions` to `questions`.
+- Change local SQLite migrations so `questions` has `id`, `question_text`, `embedding`, `semantic_hash`, and `created_at`.
+- Migrate existing local SQLite data from `faq_questions` into `questions` when needed.
+- Add `created_at` to an existing legacy `questions` table when it is missing.
+- Repoint `faq_answer_cache.question_id` foreign key from `faq_questions(id)` to `questions(id)`.
+- Drop `faq_questions` after successful migration so the local DB no longer keeps two Smart FAQ question tables.
+- Update tests and docs to describe `questions` as the local SQLite Smart FAQ table.
+- Audit other duplicate local table names and record any findings without changing unrelated domains.
+
+### Excluded Scope
+
+- Preserving `faq_questions` as a compatibility table or view.
+- Changing Postgres FAQ repository behavior; it already uses `questions`.
+- Migrating Auth `user_identities`/`auth_identities` naming differences in this feature.
+- Changing Upload & Ask table names.
+- Editing committed or ignored SQLite database files directly as source artifacts.
+
+### Core Flows
+
+- A fresh local SQLite database initializes with `questions`, `faq_answer_cache`, and `faq_trending_queries`.
+- An existing local database with only legacy `questions` gains `created_at` and continues using existing rows.
+- An existing local database with `faq_questions` migrates its rows into `questions`, preserves answer cache referential integrity, and drops `faq_questions`.
+- Smart FAQ exact, semantic hash, nearest-neighbor, insert, answer cache, and trending flows continue to work through SQLite.
+
+### Constraints
+
+- Migrations must be idempotent across fresh and existing SQLite files.
+- Existing `questions` data should not be overwritten by `faq_questions` rows with duplicate `question_text`.
+- Local verification must remain deterministic and avoid live LLM, Postgres, Valkey, pgvector, R2, or GCP.
+- Invalid or unusual user data should fail explicitly rather than silently corrupting rows.
+
+### Ambiguities Or Assumptions
+
+- `questions` is the canonical Smart FAQ question table name because both the Postgres adapter and historical FAQ schema use it.
+- The empty `faq_questions` table in the current local database can be removed after the migration path is implemented.
+- The local DB also contains an empty `user_identities` table while SQLite Auth uses `auth_identities`; this is a separate Auth naming issue and not part of F014.
+
+### Required Capabilities
+
+- SQLite schema migration tests that can construct legacy `questions`, `faq_questions`, and cache states.
+- Focused Go tests for FAQ repository/store behavior after migration.
+- Durable docs and harness evidence for the schema audit.
+
+### Implementation Paths
+
+- SQLite migration: `internal/infra/sqlite/db.go`.
+- SQLite FAQ repository: `internal/infra/faqrepo/sqlite_repository.go` and tests.
+- SQLite FAQ store: `internal/infra/faqstore/sqlite_store.go` and tests.
+- Documentation: `README.md`, `docs/faq/faq-spec.md`, and any local capability docs that name Smart FAQ SQLite tables.
+- Harness state and run evidence under `.agent-harness/`.
+
+### Verification Surface
+
+- Focused SQLite migration and FAQ tests.
+- `go test -count=1 ./internal/infra/sqlite ./internal/infra/faqrepo ./internal/infra/faqstore ./cmd/app`.
+- Root `./init.sh` continues to pass.
+
 ## Harness Governance
 
 ### Skill Assisted Workflow

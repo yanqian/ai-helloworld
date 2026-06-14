@@ -6,7 +6,8 @@ This is a full, self-contained spec you can paste directly into your Codex spec 
 
 # FAQ Search Modes Specification (with SearchModeExact)
 
-> **Infra note**: Local development now uses SQLite for FAQ questions, answer cache, and trending queries. PostgreSQL/pgvector and Valkey/Redis remain optional legacy/integration backends configured through environment variables or `configs/config.yaml`.
+> **Infra note**: Local development uses SQLite for FAQ questions, answer cache, and trending queries. PostgreSQL/pgvector and Valkey/Redis remain optional legacy/integration backends configured through environment variables or `configs/config.yaml`.
+> The canonical question table name is `questions` in both SQLite and Postgres. Older local SQLite databases that contain `faq_questions` are migrated into `questions` during startup and the legacy table is dropped.
 
 This system supports four search modes:
 
@@ -15,13 +16,13 @@ This system supports four search modes:
 * **SearchModeSemanticHash** – hash-based approximate lookup (LSH)
 * **SearchModeHybrid** – exact match → similarity fallback
 
-Every mode attempts to reuse cached answers if possible; otherwise it inserts the question, generates an answer via the LLM, and stores it in both Postgres and the KV store.
+Every mode attempts to reuse cached answers if possible; otherwise it inserts the question, generates an answer via the LLM, and stores the question plus cache data in the configured local or integration backend. The default local backend is SQLite.
 
 ---
 
 # 1. Data Model
 
-### 1.1 `questions` table (Postgres)
+### 1.1 `questions` table
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector; -- 在数据库里启用 extension
@@ -29,14 +30,20 @@ CREATE TABLE questions (
     id              BIGSERIAL PRIMARY KEY,
     question_text   TEXT NOT NULL,
     embedding       VECTOR(1536) NOT NULL,     -- OpenAI embedding vector, small 1536, large 3072, large-v2 4096
-    semantic_hash   BIGINT                      -- used only for SemanticHash mode
+    semantic_hash   BIGINT,                     -- used only for SemanticHash mode
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ```
 
-### 1.2 KV Store
+SQLite uses the same table name and domain fields. The local adapter stores `embedding` as JSON text and stores `semantic_hash` as text to avoid requiring pgvector in local development.
 
-* **Key:** `"q:<question_id>"`
-* **Value:** serialized answer JSON
+### 1.2 Answer Cache
+
+Local SQLite stores answer cache rows in `faq_answer_cache`, keyed by `question_id` and referencing `questions(id)`. Legacy/integration Valkey deployments may still use keys such as `"q:<question_id>"` for serialized answer JSON.
+
+### 1.3 Trending Queries
+
+Local SQLite stores recommendation counts in `faq_trending_queries`.
 
 ---
 
@@ -58,12 +65,14 @@ uint64 semanticHash(Vector embedding)
 * Deterministic
 * Uses pre-initialized random projection vectors
 
-### 2.3 KV Functions
+### 2.3 Cache Functions
 
 ```text
 (string, bool) kvGet(key: string)
 void kvSet(key: string, value: string)
 ```
+
+For local SQLite, these operations map to `faq_answer_cache`; Valkey/KV behavior is retained only for legacy/integration deployments.
 
 ### 2.4 LLM Answer Generation
 
