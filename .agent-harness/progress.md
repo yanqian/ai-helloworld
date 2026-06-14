@@ -34,10 +34,12 @@ F013 is complete: the installed hidden harness now supports provider runtime pre
 
 F014 is complete: local SQLite Smart FAQ now uses `questions` as the canonical question table, adds/backfills `created_at` on legacy `questions`, migrates rows from `faq_questions`, rebuilds `faq_answer_cache` with a foreign key to `questions(id)`, and drops `faq_questions`. The schema audit also recorded the separate empty Auth naming split `user_identities` versus `auth_identities` without changing Auth in this feature.
 
+F015 is complete: local SQLite Auth now uses `user_identities` as the canonical identity table, migrates existing `auth_identities` rows, drops the legacy table, and aligns SQLite Auth tests and docs with the Postgres/login schema name.
+
 
 ## Last Completed Feature
 
-F014 Unify SQLite FAQ questions table.
+F015 Unify SQLite Auth identity table.
 
 ## Next Feature
 
@@ -57,7 +59,7 @@ None.
 - `make work` for F011 invoked the orchestrator successfully but the Codex provider failed before coding because it could not write `/Users/armstrong/.codex/state_5.sqlite` and could not initialize the in-process app-server client. Manual fallback completed F011 with durable evaluator evidence.
 - `make work` for F012 hit the same Codex provider runtime permission failure before business coding; manual fallback completed F012 with durable evaluator evidence.
 - Local SQLite Smart FAQ table naming is unified on `questions` as of F014; older `faq_questions` tables are migrated and dropped during SQLite startup.
-- Schema audit also found `user_identities` versus `auth_identities`; both are empty in the inspected local DB and this Auth naming difference is out of scope for F014.
+- Local SQLite Auth table naming is unified on `user_identities` as of F015; older `auth_identities` tables are migrated and dropped during SQLite startup.
 
 
 - F013 syncs the template provider runtime preflight fix so future provider permission gaps can stop before feature attempts are mutated and ask the outer agent or user for explicit escalation.

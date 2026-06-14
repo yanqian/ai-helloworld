@@ -1,7 +1,7 @@
 http:
   address: ":8080"
   readTimeout: 10s
-  writeTimeout: 10s
+  writeTimeout: 60s
   allowedOrigins:
     - "*"
   rateLimit:

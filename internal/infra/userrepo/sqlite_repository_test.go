@@ -112,7 +112,7 @@ func TestSQLiteRepositoryParsesDatabaseStyleIdentityTimestamps(t *testing.T) {
 	`, 1, "legacy-identity@example.com", "Legacy", "hash", "2025-11-21 14:10:45.570822+00")
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, `
-		INSERT INTO auth_identities (user_id, provider, provider_subject, provider_email, refresh_token, created_at, updated_at)
+		INSERT INTO user_identities (user_id, provider, provider_subject, provider_email, refresh_token, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`, 1, "google", "legacy-subject", "legacy-identity@example.com", "refresh", "2025-11-21 14:10:45.570822+00", "2025-11-21 15:10:45.570822+00")
 	require.NoError(t, err)

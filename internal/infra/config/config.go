@@ -439,7 +439,9 @@ func applyEnvOverrides(cfg *Config) {
 func defaultConfig() *Config {
 	return &Config{
 		HTTP: HTTPConfig{
-			Address: ":8080",
+			Address:      ":8080",
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 60 * time.Second,
 			AllowedOrigins: []string{
 				"*",
 			},

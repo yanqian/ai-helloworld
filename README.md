@@ -28,7 +28,7 @@ make run
 make local-smoke
 ```
 
-Configuration values come from environment variables, `configs/config.yaml`, or defaults in `internal/infra/config`. Local persistence is SQLite by default at `data/ai-helloworld.db`, and SQLite database files are intentionally ignored by git.
+Configuration values come from environment variables, `configs/config.yaml`, or defaults in `internal/infra/config`. Local persistence is SQLite by default at `data/ai-helloworld.db`, and SQLite database files are intentionally ignored by git. Local Auth stores users in `users` and external login identities in `user_identities`.
 
 `JWT_SECRET` is required for local login and protected-route testing. `LLM_API_KEY` is only required for real LLM-backed summarization, FAQ answers, embeddings, and Upload & Ask responses; without it, local AI routes use deterministic offline responses so the backend can still start for frontend/backend联调. The recovery checks and most local persistence tests run without live AI, OAuth, R2, Postgres, pgvector, Valkey, Redis, or GCP credentials. UV advice uses `UV_API_BASE_URL` (defaults to data.gov.sg) and can be tuned via `UV_PROMPT`.
 
@@ -232,7 +232,7 @@ Answer a question using one of four lookup strategies (exact, semantic hash, sim
 
 Looking for implementation details? See the [FAQ spec](docs/faq/faq-spec.md) for the ranking heuristics, cache flows, and data contracts shared with the frontend.
 
-Legacy/integration deployments can still connect to Postgres and Valkey/Redis, but `configs/config.yaml` now centers the local SQLite path. Older local databases that contain `faq_questions` are migrated into `questions` and the legacy table is dropped during SQLite startup. A separate schema audit found the Auth naming split `user_identities` versus `auth_identities`; that belongs to Auth cleanup, not the Smart FAQ table unification.
+Legacy/integration deployments can still connect to Postgres and Valkey/Redis, but `configs/config.yaml` now centers the local SQLite path. Older local databases that contain `faq_questions` are migrated into `questions` and the legacy table is dropped during SQLite startup. Older local SQLite Auth databases that contain `auth_identities` are migrated into `user_identities` and the legacy table is dropped during SQLite startup.
 
 ```bash
 curl --location 'http://localhost:8080/api/v1/faq/search' \

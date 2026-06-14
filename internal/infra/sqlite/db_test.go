@@ -21,6 +21,151 @@ func TestOpenFreshFAQSchemaUsesQuestionsTable(t *testing.T) {
 	require.Equal(t, "questions", testForeignKeyTable(t, ctx, db, "faq_answer_cache", "question_id"))
 }
 
+func TestOpenFreshAuthSchemaUsesUserIdentitiesTable(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(ctx, filepath.Join(t.TempDir(), "fresh-auth.db"))
+	require.NoError(t, err)
+	defer db.Close()
+
+	require.True(t, testTableExists(t, ctx, db, "user_identities"))
+	require.False(t, testTableExists(t, ctx, db, "auth_identities"))
+	require.Equal(t, "users", testForeignKeyTable(t, ctx, db, "user_identities", "user_id"))
+}
+
+func TestOpenMigratesAuthIdentities(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "auth-identities.db")
+	raw := testRawDB(t, path)
+	_, err := raw.ExecContext(ctx, `
+		CREATE TABLE users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			email TEXT NOT NULL UNIQUE,
+			nickname TEXT NOT NULL,
+			password_hash TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)
+	`)
+	require.NoError(t, err)
+	_, err = raw.ExecContext(ctx, `
+		CREATE TABLE auth_identities (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			provider TEXT NOT NULL,
+			provider_subject TEXT NOT NULL,
+			provider_email TEXT NOT NULL,
+			refresh_token TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			UNIQUE(provider, provider_subject),
+			UNIQUE(user_id, provider),
+			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+		)
+	`)
+	require.NoError(t, err)
+	_, err = raw.ExecContext(ctx, `
+		INSERT INTO users (id, email, nickname, password_hash, created_at)
+		VALUES (1, 'legacy-auth@example.com', 'Legacy', 'hash', '2026-06-14T00:00:00Z')
+	`)
+	require.NoError(t, err)
+	_, err = raw.ExecContext(ctx, `
+		INSERT INTO auth_identities (id, user_id, provider, provider_subject, provider_email, refresh_token, created_at, updated_at)
+		VALUES (7, 1, 'google', 'legacy-subject', 'legacy-auth@example.com', 'refresh-legacy', '2026-06-14T00:00:01Z', '2026-06-14T00:00:02Z')
+	`)
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	db, err := Open(ctx, path)
+	require.NoError(t, err)
+	defer db.Close()
+
+	require.True(t, testTableExists(t, ctx, db, "user_identities"))
+	require.False(t, testTableExists(t, ctx, db, "auth_identities"))
+	require.Equal(t, "users", testForeignKeyTable(t, ctx, db, "user_identities", "user_id"))
+
+	var providerSubject string
+	var refreshToken string
+	err = db.QueryRowContext(ctx, `SELECT provider_subject, refresh_token FROM user_identities WHERE id = 7`).Scan(&providerSubject, &refreshToken)
+	require.NoError(t, err)
+	require.Equal(t, "legacy-subject", providerSubject)
+	require.Equal(t, "refresh-legacy", refreshToken)
+}
+
+func TestOpenDoesNotOverwriteExistingUserIdentitiesFromAuthIdentities(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "duplicate-identities.db")
+	raw := testRawDB(t, path)
+	_, err := raw.ExecContext(ctx, `
+		CREATE TABLE users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			email TEXT NOT NULL UNIQUE,
+			nickname TEXT NOT NULL,
+			password_hash TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)
+	`)
+	require.NoError(t, err)
+	_, err = raw.ExecContext(ctx, `
+		CREATE TABLE user_identities (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			provider TEXT NOT NULL,
+			provider_subject TEXT NOT NULL,
+			provider_email TEXT NOT NULL,
+			refresh_token TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			UNIQUE(provider, provider_subject),
+			UNIQUE(user_id, provider),
+			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+		)
+	`)
+	require.NoError(t, err)
+	_, err = raw.ExecContext(ctx, `
+		CREATE TABLE auth_identities (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			provider TEXT NOT NULL,
+			provider_subject TEXT NOT NULL,
+			provider_email TEXT NOT NULL,
+			refresh_token TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			UNIQUE(provider, provider_subject),
+			UNIQUE(user_id, provider),
+			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+		)
+	`)
+	require.NoError(t, err)
+	_, err = raw.ExecContext(ctx, `
+		INSERT INTO users (id, email, nickname, password_hash, created_at)
+		VALUES (1, 'canonical@example.com', 'Canon', 'hash', '2026-06-14T00:00:00Z')
+	`)
+	require.NoError(t, err)
+	_, err = raw.ExecContext(ctx, `
+		INSERT INTO user_identities (id, user_id, provider, provider_subject, provider_email, refresh_token, created_at, updated_at)
+		VALUES (1, 1, 'google', 'same-subject', 'canonical@example.com', 'refresh-canonical', '2026-06-14T00:00:01Z', '2026-06-14T00:00:02Z')
+	`)
+	require.NoError(t, err)
+	_, err = raw.ExecContext(ctx, `
+		INSERT INTO auth_identities (id, user_id, provider, provider_subject, provider_email, refresh_token, created_at, updated_at)
+		VALUES (2, 1, 'google', 'same-subject', 'legacy@example.com', 'refresh-legacy', '2026-06-14T00:00:03Z', '2026-06-14T00:00:04Z')
+	`)
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	db, err := Open(ctx, path)
+	require.NoError(t, err)
+	defer db.Close()
+
+	require.False(t, testTableExists(t, ctx, db, "auth_identities"))
+	var count int
+	var refreshToken string
+	err = db.QueryRowContext(ctx, `SELECT COUNT(*), MAX(refresh_token) FROM user_identities WHERE provider = 'google' AND provider_subject = 'same-subject'`).Scan(&count, &refreshToken)
+	require.NoError(t, err)
+	require.Equal(t, 1, count)
+	require.Equal(t, "refresh-canonical", refreshToken)
+}
+
 func TestOpenMigratesLegacyQuestionsCreatedAt(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "legacy-questions.db")

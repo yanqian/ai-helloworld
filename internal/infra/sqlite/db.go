@@ -64,19 +64,6 @@ func migrate(ctx context.Context, db *sql.DB) error {
 			password_hash TEXT NOT NULL,
 			created_at TEXT NOT NULL
 		)`,
-		`CREATE TABLE IF NOT EXISTS auth_identities (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			user_id INTEGER NOT NULL,
-			provider TEXT NOT NULL,
-			provider_subject TEXT NOT NULL,
-			provider_email TEXT NOT NULL,
-			refresh_token TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL,
-			UNIQUE(provider, provider_subject),
-			UNIQUE(user_id, provider),
-			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-		)`,
 		`CREATE TABLE IF NOT EXISTS faq_trending_queries (
 			canonical TEXT PRIMARY KEY,
 			display TEXT NOT NULL,
@@ -169,8 +156,125 @@ func migrate(ctx context.Context, db *sql.DB) error {
 			return fmt.Errorf("migrate sqlite schema: %w", err)
 		}
 	}
+	if err := migrateAuthIdentities(ctx, db); err != nil {
+		return err
+	}
 	if err := migrateFAQQuestions(ctx, db); err != nil {
 		return err
+	}
+	return nil
+}
+
+func migrateAuthIdentities(ctx context.Context, db *sql.DB) error {
+	if err := ensureUserIdentitiesTable(ctx, db); err != nil {
+		return err
+	}
+	if err := migrateAuthIdentityRows(ctx, db); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS auth_identities`); err != nil {
+		return fmt.Errorf("drop legacy auth_identities table: %w", err)
+	}
+	return nil
+}
+
+func ensureUserIdentitiesTable(ctx context.Context, db *sql.DB) error {
+	exists, err := tableExists(ctx, db, "user_identities")
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return createUserIdentitiesTable(ctx, db, "user_identities")
+	}
+	canonicalID, err := tableHasIntegerPrimaryKey(ctx, db, "user_identities", "id")
+	if err != nil {
+		return err
+	}
+	if canonicalID {
+		return nil
+	}
+	return rebuildUserIdentitiesTable(ctx, db)
+}
+
+func createUserIdentitiesTable(ctx context.Context, db *sql.DB, name string) error {
+	if _, err := db.ExecContext(ctx, fmt.Sprintf(`
+		CREATE TABLE %s (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			provider TEXT NOT NULL,
+			provider_subject TEXT NOT NULL,
+			provider_email TEXT NOT NULL,
+			refresh_token TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			UNIQUE(provider, provider_subject),
+			UNIQUE(user_id, provider),
+			FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+		)
+	`, name)); err != nil {
+		return fmt.Errorf("create %s table: %w", name, err)
+	}
+	return nil
+}
+
+func rebuildUserIdentitiesTable(ctx context.Context, db *sql.DB) error {
+	if _, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS user_identities_new`); err != nil {
+		return fmt.Errorf("drop stale replacement user_identities table: %w", err)
+	}
+	if err := createUserIdentitiesTable(ctx, db, "user_identities_new"); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO user_identities_new (id, user_id, provider, provider_subject, provider_email, refresh_token, created_at, updated_at)
+		SELECT id, user_id, provider, provider_subject, provider_email, COALESCE(refresh_token, ''), created_at, updated_at
+		FROM user_identities
+	`); err != nil {
+		return fmt.Errorf("copy existing user_identities rows: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `DROP TABLE user_identities`); err != nil {
+		return fmt.Errorf("drop old user_identities table: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `ALTER TABLE user_identities_new RENAME TO user_identities`); err != nil {
+		return fmt.Errorf("rename replacement user_identities table: %w", err)
+	}
+	return nil
+}
+
+func migrateAuthIdentityRows(ctx context.Context, db *sql.DB) error {
+	exists, err := tableExists(ctx, db, "auth_identities")
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO user_identities (id, user_id, provider, provider_subject, provider_email, refresh_token, created_at, updated_at)
+		SELECT ai.id, ai.user_id, ai.provider, ai.provider_subject, ai.provider_email, ai.refresh_token, ai.created_at, ai.updated_at
+		FROM auth_identities ai
+		WHERE NOT EXISTS (
+			SELECT 1 FROM user_identities ui
+			WHERE ui.id = ai.id
+				OR (ui.provider = ai.provider AND ui.provider_subject = ai.provider_subject)
+				OR (ui.user_id = ai.user_id AND ui.provider = ai.provider)
+		)
+	`); err != nil {
+		return fmt.Errorf("migrate auth_identities rows into user_identities: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO user_identities (user_id, provider, provider_subject, provider_email, refresh_token, created_at, updated_at)
+		SELECT ai.user_id, ai.provider, ai.provider_subject, ai.provider_email, ai.refresh_token, ai.created_at, ai.updated_at
+		FROM auth_identities ai
+		WHERE EXISTS (
+			SELECT 1 FROM user_identities ui WHERE ui.id = ai.id
+		)
+		AND NOT EXISTS (
+			SELECT 1 FROM user_identities ui
+			WHERE (ui.provider = ai.provider AND ui.provider_subject = ai.provider_subject)
+				OR (ui.user_id = ai.user_id AND ui.provider = ai.provider)
+		)
+	`); err != nil {
+		return fmt.Errorf("migrate auth_identities rows with new ids: %w", err)
 	}
 	return nil
 }
@@ -336,6 +440,34 @@ func columnExists(ctx context.Context, db *sql.DB, table string, column string) 
 	}
 	if err := rows.Err(); err != nil {
 		return false, fmt.Errorf("iterate %s columns: %w", table, err)
+	}
+	return false, nil
+}
+
+func tableHasIntegerPrimaryKey(ctx context.Context, db *sql.DB, table string, column string) (bool, error) {
+	rows, err := db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return false, fmt.Errorf("inspect %s primary key: %w", table, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid       int
+			name      string
+			typ       string
+			notNull   int
+			dfltValue sql.NullString
+			pk        int
+		)
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dfltValue, &pk); err != nil {
+			return false, fmt.Errorf("scan %s primary key: %w", table, err)
+		}
+		if name == column {
+			return pk == 1 && strings.EqualFold(typ, "INTEGER"), nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("iterate %s primary key: %w", table, err)
 	}
 	return false, nil
 }

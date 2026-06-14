@@ -69,7 +69,7 @@ func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (auth.User, bo
 func (r *SQLiteRepository) GetIdentity(ctx context.Context, provider, providerSubject string) (auth.Identity, bool, error) {
 	return sqliteScanIdentity(r.db.QueryRowContext(ctx, `
 		SELECT id, user_id, provider, provider_subject, provider_email, refresh_token, created_at, updated_at
-		FROM auth_identities
+		FROM user_identities
 		WHERE provider = ? AND provider_subject = ?
 	`, provider, providerSubject))
 }
@@ -78,7 +78,7 @@ func (r *SQLiteRepository) GetIdentity(ctx context.Context, provider, providerSu
 func (r *SQLiteRepository) GetIdentityByUser(ctx context.Context, userID int64, provider string) (auth.Identity, bool, error) {
 	return sqliteScanIdentity(r.db.QueryRowContext(ctx, `
 		SELECT id, user_id, provider, provider_subject, provider_email, refresh_token, created_at, updated_at
-		FROM auth_identities
+		FROM user_identities
 		WHERE user_id = ? AND provider = ?
 	`, userID, provider))
 }
@@ -102,7 +102,7 @@ func (r *SQLiteRepository) UpsertIdentity(ctx context.Context, identity auth.Ide
 		}
 		existing.UpdatedAt = now
 		_, err := r.db.ExecContext(ctx, `
-			UPDATE auth_identities
+			UPDATE user_identities
 			SET provider_email = ?, refresh_token = ?, updated_at = ?
 			WHERE id = ?
 		`, existing.ProviderEmail, existing.RefreshToken, existing.UpdatedAt.Format(time.RFC3339Nano), existing.ID)
@@ -112,7 +112,7 @@ func (r *SQLiteRepository) UpsertIdentity(ctx context.Context, identity auth.Ide
 	identity.CreatedAt = now
 	identity.UpdatedAt = now
 	res, err := r.db.ExecContext(ctx, `
-		INSERT INTO auth_identities (user_id, provider, provider_subject, provider_email, refresh_token, created_at, updated_at)
+		INSERT INTO user_identities (user_id, provider, provider_subject, provider_email, refresh_token, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`, identity.UserID, identity.Provider, identity.ProviderSubject, identity.ProviderEmail, identity.RefreshToken, identity.CreatedAt.Format(time.RFC3339Nano), identity.UpdatedAt.Format(time.RFC3339Nano))
 	if err != nil {

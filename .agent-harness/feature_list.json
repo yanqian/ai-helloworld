@@ -238,6 +238,26 @@
       "attempts": 2,
       "last_error": "",
       "priority": "P0"
+    },
+    {
+      "id": "F015",
+      "title": "Unify SQLite Auth identity table",
+      "description": "Make local SQLite Auth use `user_identities` as the canonical identity table, migrate existing `auth_identities` data, drop the legacy table, and align tests and docs with the Postgres/login schema name.",
+      "acceptance": [
+        "Fresh SQLite initialization creates `user_identities` and does not create `auth_identities`.",
+        "Existing SQLite databases with `auth_identities` migrate identity rows into `user_identities` and drop `auth_identities`.",
+        "Existing `user_identities` rows are not overwritten by duplicate legacy `auth_identities` rows.",
+        "SQLite Auth repository lookup and upsert methods read and write `user_identities`.",
+        "Registration, login, current-user lookup, and Google identity persistence continue to work through SQLite.",
+        "Tests cover fresh schema, legacy `auth_identities` migration, duplicate conflict preservation, and SQLite Auth repository behavior.",
+        "Docs describe `user_identities` as the local SQLite Auth identity table and no longer present `auth_identities` as current schema.",
+        "Focused tests and root `./init.sh` pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 1,
+      "last_error": "",
+      "priority": "P0"
     }
   ]
 }

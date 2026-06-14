@@ -224,7 +224,7 @@ Ensure local SQLite-backed registration, login, and profile fetches keep working
 ### Included Scope
 
 - SQLite Auth user reads from `users.created_at`.
-- SQLite Auth identity reads from `auth_identities.created_at` and `auth_identities.updated_at`.
+- SQLite Auth identity reads from the canonical identity table's `created_at` and `updated_at` columns.
 - Compatibility with the observed failing value shape `2025-11-21 14:10:45.570822+00`.
 - Regression tests that reproduce the parsing failure and prove user and identity reads succeed.
 
@@ -387,6 +387,68 @@ Make the local SQLite Smart FAQ schema use the same canonical `questions` table 
 
 - Focused SQLite migration and FAQ tests.
 - `go test -count=1 ./internal/infra/sqlite ./internal/infra/faqrepo ./internal/infra/faqstore ./cmd/app`.
+- Root `./init.sh` continues to pass.
+
+## SQLite Auth Identity Table Unification
+
+### Goal
+
+Make local SQLite Auth use the same canonical `user_identities` table name as the Postgres Auth repository and login/OAuth schema docs so developers do not need to know two physical table names for the same identity concept.
+
+### Included Scope
+
+- Change the SQLite Auth repository from `auth_identities` to `user_identities`.
+- Change local SQLite migrations so fresh databases create `user_identities` and do not create `auth_identities`.
+- Migrate existing local SQLite data from `auth_identities` into `user_identities` when needed.
+- Drop `auth_identities` after successful migration so the local DB no longer keeps two Auth identity tables.
+- Preserve current email/password Auth behavior and Google identity upsert behavior.
+- Update tests and docs to describe `user_identities` as the local SQLite Auth identity table.
+
+### Excluded Scope
+
+- Preserving `auth_identities` as a compatibility table or view.
+- Changing Postgres Auth repository behavior; it already uses `user_identities`.
+- Changing OAuth provider behavior, token semantics, or frontend Auth response shapes.
+- Editing committed or ignored SQLite database files directly as source artifacts.
+- Renaming unrelated Upload & Ask or Smart FAQ tables.
+
+### Core Flows
+
+- A fresh local SQLite database initializes with `users` and `user_identities`.
+- An existing local database with `auth_identities` migrates identity rows into `user_identities` and drops `auth_identities`.
+- Registration, login, current-user lookup, Google identity lookup, and Google identity upsert continue to work through SQLite.
+- Reopening a local SQLite database preserves users and identities through the canonical table.
+
+### Constraints
+
+- Migrations must be idempotent across fresh and existing SQLite files.
+- Existing `user_identities` data should not be overwritten by `auth_identities` rows with duplicate provider identity or duplicate user/provider identity.
+- Local verification must remain deterministic and avoid live OAuth, Postgres, Valkey, pgvector, R2, GCP, or live LLM services.
+- Invalid timestamp strings should still return explicit errors through the existing Auth timestamp parser.
+
+### Ambiguities Or Assumptions
+
+- `user_identities` is canonical because the Postgres adapter and login/OAuth schema docs already use it.
+- Current local inspected data showed both identity tables empty, but the migration still preserves non-empty legacy `auth_identities` rows for developer machines that already registered OAuth identities locally.
+- No compatibility view is needed because the user explicitly asked to unify rather than keep parallel table names.
+
+### Required Capabilities
+
+- SQLite schema migration tests that can construct legacy `auth_identities` and mixed `user_identities` states.
+- Focused Go tests for SQLite Auth repository behavior after migration.
+- Durable docs and harness evidence for the schema unification.
+
+### Implementation Paths
+
+- SQLite migration: `internal/infra/sqlite/db.go`.
+- SQLite Auth repository and tests: `internal/infra/userrepo/sqlite_repository.go` and `internal/infra/userrepo/sqlite_repository_test.go`.
+- SQLite migration tests: `internal/infra/sqlite/db_test.go`.
+- Documentation: `README.md`, `docs/login/schema.sql`, `docs/google-oauth/design.md`, and harness state.
+
+### Verification Surface
+
+- Focused SQLite migration and Auth repository tests.
+- `go test -count=1 ./internal/infra/sqlite ./internal/infra/userrepo ./cmd/app ./internal/interface/http`.
 - Root `./init.sh` continues to pass.
 
 ## Harness Governance
