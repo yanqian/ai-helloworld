@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -546,5 +548,25 @@ func formatSQLiteTime(value time.Time) string {
 }
 
 func parseSQLiteTime(value string) (time.Time, error) {
-	return time.Parse(time.RFC3339Nano, value)
+	value = strings.TrimSpace(value)
+	layouts := []string{
+		time.RFC3339Nano,
+		"2006-01-02 15:04:05.999999999-07",
+		"2006-01-02 15:04:05.999999999-0700",
+		"2006-01-02 15:04:05.999999999Z07:00",
+		"2006-01-02 15:04:05-07",
+		"2006-01-02 15:04:05-0700",
+		"2006-01-02 15:04:05Z07:00",
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02 15:04:05",
+	}
+	var lastErr error
+	for _, layout := range layouts {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed.UTC(), nil
+		}
+		lastErr = err
+	}
+	return time.Time{}, fmt.Errorf("parse sqlite uploadask time %q: %w", value, lastErr)
 }

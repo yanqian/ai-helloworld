@@ -269,6 +269,61 @@ Ensure local SQLite-backed registration, login, and profile fetches keep working
 - `go test -count=1 ./internal/infra/userrepo`.
 - Root `./init.sh` continues to pass.
 
+## Upload Ask SQLite Timestamp Compatibility
+
+### Goal
+
+Ensure Upload & Ask frontend flows keep working when local SQLite Upload & Ask rows contain timestamp strings written in either the current RFC3339 format or legacy/database-style space-separated UTC offset formats.
+
+### Included Scope
+
+- SQLite Upload & Ask document, file, chunk, QA session, and query log reads.
+- SQLite Upload & Ask conversation message and long-term memory reads.
+- Compatibility with the observed failing value shape `2025-12-05 15:06:46.339153+00`.
+- Regression tests that reproduce database-style timestamps across the Upload & Ask repository and memory adapters.
+
+### Excluded Scope
+
+- Migrating or rewriting existing SQLite database files.
+- Changing frontend code or public Upload & Ask response shapes.
+- Changing Postgres timestamp handling.
+- General timestamp compatibility for non-Upload & Ask domains beyond the already-completed Auth fix.
+
+### Core Flows
+
+- The frontend lists uploaded documents or loads document details from a local SQLite database containing database-style timestamp text.
+- The frontend asks a question and the backend reads chunks, sessions, query logs, messages, or memories that contain database-style timestamp text.
+- Backend Upload & Ask SQLite adapters parse compatible timestamps and return domain objects instead of surfacing parse errors to the frontend.
+
+### Constraints
+
+- New writes should continue using the existing RFC3339Nano format for deterministic local storage.
+- Invalid timestamp strings should still return explicit errors rather than silently zeroing time.
+- Verification should remain local and deterministic without live LLM, R2, Valkey, Postgres, pgvector, or GCP.
+
+### Ambiguities Or Assumptions
+
+- The failing frontend error is produced by the backend when an Upload & Ask SQLite scan reads existing database-style timestamp text.
+- Existing local databases may contain mixed timestamp formats; compatibility parsing is safer than requiring users to delete local data.
+
+### Required Capabilities
+
+- Focused Go tests for `internal/infra/uploadask/repo` and `internal/infra/uploadask/memory`.
+- Temporary SQLite databases for deterministic regression fixtures.
+
+### Implementation Paths
+
+- Upload & Ask SQLite repositories: `internal/infra/uploadask/repo/sqlite.go`.
+- Upload & Ask SQLite memory: `internal/infra/uploadask/memory/sqlite.go`.
+- Focused tests: `internal/infra/uploadask/repo/sqlite_test.go` and `internal/infra/uploadask/memory/sqlite_test.go`.
+- Harness state and run evidence under `.agent-harness/`.
+
+### Verification Surface
+
+- Focused regression tests fail before the parser change and pass after it.
+- `go test -count=1 ./internal/infra/uploadask/repo ./internal/infra/uploadask/memory`.
+- Root `./init.sh` continues to pass.
+
 ## Harness Governance
 
 ### Skill Assisted Workflow

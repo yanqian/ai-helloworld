@@ -182,6 +182,24 @@
       "attempts": 2,
       "last_error": "",
       "priority": "P0"
+    },
+    {
+      "id": "F012",
+      "title": "Upload Ask SQLite timestamp compatibility",
+      "description": "Fix Upload & Ask SQLite reads so frontend document, session, query log, message, and memory flows tolerate legacy/database-style timestamp strings as well as current RFC3339 writes.",
+      "acceptance": [
+        "Upload & Ask document reads parse the observed timestamp shape `2025-12-05 15:06:46.339153+00` without returning an error.",
+        "Upload & Ask chunk, file, QA session, and query log reads parse compatible database-style timestamp strings without returning an error.",
+        "Upload & Ask conversation message and memory reads parse compatible database-style timestamp strings without returning an error.",
+        "Current RFC3339Nano Upload & Ask timestamp writes and reads continue to work.",
+        "Invalid timestamp strings still return explicit errors instead of silently using zero time.",
+        "Focused Upload & Ask SQLite tests and root `./init.sh` pass."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0"
     }
   ]
 }

@@ -106,6 +106,72 @@ func TestSQLiteMessageLogAndMemoryStorePersistAcrossReopen(t *testing.T) {
 	require.Equal(t, "most important", remaining[0].Memory.Content)
 }
 
+func TestSQLiteMessageLogAndMemoryStoreParseDatabaseStyleTimestamps(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "uploadask-memory.db")
+	userID := int64(53)
+	sessionID := uuid.New()
+	legacyTime := "2025-12-05 15:06:46.339153+00"
+
+	db, err := sqliteinfra.Open(ctx, path)
+	require.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO upload_qa_sessions (id, user_id, created_at)
+		VALUES (?, ?, ?)
+	`, sessionID.String(), userID, legacyTime)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO upload_qa_messages (session_id, user_id, role, content, token_count, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, sessionID.String(), userID, string(domain.MessageRoleUser), "legacy message", 2, legacyTime)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO upload_qa_memories (session_id, user_id, source, content, embedding, importance, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, sessionID.String(), userID, string(domain.MemorySourceQATurn), "legacy memory", `[1,0,0]`, 5, legacyTime)
+	require.NoError(t, err)
+
+	messages := NewSQLiteMessageLog(db)
+	memories := NewSQLiteMemoryStore(db)
+
+	recent, err := messages.ListRecent(ctx, userID, sessionID, 100, 10)
+	require.NoError(t, err)
+	require.Len(t, recent, 1)
+	require.Equal(t, "legacy message", recent[0].Content)
+	require.Equal(t, time.Date(2025, 12, 5, 15, 6, 46, 339153000, time.UTC), recent[0].CreatedAt)
+
+	found, err := memories.Search(ctx, userID, sessionID, []float32{1, 0, 0}, 1)
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	require.Equal(t, "legacy memory", found[0].Memory.Content)
+	require.Equal(t, recent[0].CreatedAt, found[0].Memory.CreatedAt)
+}
+
+func TestSQLiteMessageLogRejectsInvalidTimestamp(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "uploadask-memory.db")
+	userID := int64(54)
+	sessionID := uuid.New()
+
+	db, err := sqliteinfra.Open(ctx, path)
+	require.NoError(t, err)
+	defer db.Close()
+
+	insertSQLiteSession(t, ctx, db, sessionID, userID, time.Now().UTC())
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO upload_qa_messages (session_id, user_id, role, content, token_count, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, sessionID.String(), userID, string(domain.MessageRoleUser), "bad time", 2, "not-a-time")
+	require.NoError(t, err)
+
+	messages := NewSQLiteMessageLog(db)
+	_, err = messages.ListRecent(ctx, userID, sessionID, 100, 10)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "parse sqlite uploadask time")
+}
+
 func insertSQLiteSession(t *testing.T, ctx context.Context, db *sql.DB, id uuid.UUID, userID int64, createdAt time.Time) {
 	t.Helper()
 	_, err := db.ExecContext(ctx, `

@@ -28,9 +28,12 @@ F010 is complete: local backend startup now only requires `JWT_SECRET` for auth 
 
 F011 is complete: SQLite Auth user and identity scans now parse both current RFC3339Nano timestamps and legacy/database-style timestamp text such as `2025-11-21 14:10:45.570822+00`, while invalid timestamp strings still return explicit parse errors. Focused regression coverage protects user reads, identity reads, current persisted Auth behavior, and invalid timestamp failures.
 
+F012 is complete: Upload & Ask SQLite repository and memory scans now parse both current RFC3339Nano timestamps and legacy/database-style timestamp text such as `2025-12-05 15:06:46.339153+00`, while invalid timestamp strings still return explicit parse errors. Focused regression coverage protects document, file, chunk, QA session, query log, message, and memory reads.
+
+
 ## Last Completed Feature
 
-F011 SQLite Auth timestamp compatibility.
+F012 Upload Ask SQLite timestamp compatibility.
 
 ## Next Feature
 
@@ -46,7 +49,10 @@ None.
 - The sibling frontend repository is `/Users/armstrong/Project/ai-helloworld-fe` and needs matching contract awareness.
 - Local backend联调 startup requires `JWT_SECRET`; `LLM_API_KEY` is optional and only needed for real LLM quality. `make local-smoke` verifies the no-live-LLM startup path.
 - Local Auth rows may contain legacy/database-style timestamp text such as `2025-11-21 14:10:45.570822+00`; F011 makes SQLite Auth reads compatible while preserving explicit errors for invalid timestamps.
+- Upload & Ask rows may contain legacy/database-style timestamp text such as `2025-12-05 15:06:46.339153+00`; F012 makes Upload & Ask SQLite reads compatible while preserving explicit errors for invalid timestamps.
 - `make work` for F011 invoked the orchestrator successfully but the Codex provider failed before coding because it could not write `/Users/armstrong/.codex/state_5.sqlite` and could not initialize the in-process app-server client. Manual fallback completed F011 with durable evaluator evidence.
+- `make work` for F012 hit the same Codex provider runtime permission failure before business coding; manual fallback completed F012 with durable evaluator evidence.
+
 
 ## Recovery Notes
 
