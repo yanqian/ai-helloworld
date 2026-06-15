@@ -1,8 +1,19 @@
-# Backend Service
+# AI Helloworld Backend
 
-Go HTTP service that powers summarization, UV advice, Smart FAQ, and Upload & Ask. The default developer workflow is local-first: Auth, Smart FAQ, and Upload & Ask persistence use SQLite under `data/` without GCP, Cloud Run, remote Postgres, pgvector, Valkey, or R2.
+Local-first Go backend playground for AI product features: authenticated summarization, streaming responses, Singapore UV advice, Smart FAQ, Upload & Ask document Q&A, and SQLite-backed persistence.
 
-Shared frontend/backend API contract notes live in [`docs/api-contract.md`](docs/api-contract.md). The sibling frontend repository is `/Users/armstrong/Project/ai-helloworld-fe`.
+The default developer workflow is intentionally simple: Auth, Smart FAQ, and Upload & Ask persistence use SQLite under `data/` without GCP, Cloud Run, remote Postgres, pgvector, Valkey, or R2.
+
+Shared frontend/backend API contract notes live in [`docs/api-contract.md`](docs/api-contract.md). The sibling frontend repository is [yanqian/ai-helloworld-fe](https://github.com/yanqian/ai-helloworld-fe).
+
+## What It Demonstrates
+
+- Go HTTP API design with auth, refresh tokens, structured errors, and SSE streaming.
+- Local-first persistence with SQLite and deterministic offline AI fallbacks for no-key development.
+- Upload & Ask document Q&A with chunking, embeddings, similarity search, and citation-shaped responses.
+- Smart FAQ search with exact, semantic hash, similarity, and hybrid lookup strategies.
+- Optional adapters for LLMs, R2, Redis/Valkey, Postgres, and pgvector without requiring them for local use.
+- Frontend/backend contract-driven development with a sibling React application.
 
 ## Getting Started
 
