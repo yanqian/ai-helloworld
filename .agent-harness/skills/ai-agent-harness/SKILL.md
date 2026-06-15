@@ -59,7 +59,10 @@ python3 /path/to/skill/scripts/init_harness.py --root /path/to/project --mode re
 
 ## Workflows
 
-For planning, one-feature work, evaluation, continuation, and final commit rules, read `references/workflows.md`.
+For planning, one-feature work, evaluation, continuation, and final commit rules, read the skill-local workflow reference:
+
+- When using an installed skill, resolve `references/workflows.md` relative to this `SKILL.md` file.
+- In hidden-layout repositories with an embedded recovery copy, that file is normally `.agent-harness/skills/ai-agent-harness/references/workflows.md`.
 
 Use the workflow names as intent detectors:
 

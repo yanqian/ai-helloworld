@@ -36,10 +36,12 @@ F014 is complete: local SQLite Smart FAQ now uses `questions` as the canonical q
 
 F015 is complete: local SQLite Auth now uses `user_identities` as the canonical identity table, migrates existing `auth_identities` rows, drops the legacy table, and aligns SQLite Auth tests and docs with the Postgres/login schema name.
 
+F016 is complete: the local Upload & Ask ImmediateQueue now detaches handler execution from upload request cancellation, focused queue plus HTTP/router tests cover the regression, and durable `EVAL_PASS: F016` evaluator evidence is recorded.
+
 
 ## Last Completed Feature
 
-F015 Unify SQLite Auth identity table.
+F016 Detach Upload Ask background context.
 
 ## Next Feature
 

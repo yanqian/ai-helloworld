@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	uploadembedder "github.com/yanqian/ai-helloworld/internal/infra/uploadask/embedder"
 	uploadllm "github.com/yanqian/ai-helloworld/internal/infra/uploadask/llm"
 	uploadmemory "github.com/yanqian/ai-helloworld/internal/infra/uploadask/memory"
+	uploadqueue "github.com/yanqian/ai-helloworld/internal/infra/uploadask/queue"
 	uploadrepo "github.com/yanqian/ai-helloworld/internal/infra/uploadask/repo"
 	uploadstorage "github.com/yanqian/ai-helloworld/internal/infra/uploadask/storage"
 	apperrors "github.com/yanqian/ai-helloworld/pkg/errors"
@@ -306,10 +308,13 @@ func TestRouter_PublicAuthContractSmoke(t *testing.T) {
 }
 
 func TestRouter_UploadAskLocalContractSmoke(t *testing.T) {
-	uploadSvc := newLocalUploadAskServiceForTest()
+	storage := newBlockingGetStorage()
+	uploadSvc := newQueuedLocalUploadAskServiceForTest(t, storage)
 	server := newRouterUnderTest(t, &stubSummarizer{}, nil, nil, nil, uploadSvc)
 
-	upload := performMultipartUpload(t, "/api/v1/upload-ask/documents", server, "local-notes.txt", "Local Notes", "Local SQLite upload ask contract text with citation context.")
+	uploadCtx, cancelUploadCtx := context.WithCancel(context.Background())
+	upload := performMultipartUpload(t, "/api/v1/upload-ask/documents", server, "local-notes.txt", "Local Notes", "Local SQLite upload ask contract text with citation context.", withRequestContext(uploadCtx))
+	cancelUploadCtx()
 	require.Equal(t, http.StatusAccepted, upload.Code)
 
 	var uploadBody struct {
@@ -329,9 +334,20 @@ func TestRouter_UploadAskLocalContractSmoke(t *testing.T) {
 	require.Equal(t, http.StatusOK, pending.Code)
 	var pendingDoc uploadask.Document
 	require.NoError(t, json.Unmarshal(pending.Body.Bytes(), &pendingDoc))
-	require.Equal(t, uploadask.DocumentStatusPending, pendingDoc.Status)
+	require.Contains(t, []uploadask.DocumentStatus{uploadask.DocumentStatusPending, uploadask.DocumentStatusProcessing}, pendingDoc.Status)
 
-	require.NoError(t, uploadSvc.ProcessDocument(context.Background(), uploadBody.Document.ID, 1))
+	storage.AllowGet()
+	require.Eventually(t, func() bool {
+		processed := performJSONRequest(http.MethodGet, docPath, "", server)
+		if processed.Code != http.StatusOK {
+			return false
+		}
+		var doc uploadask.Document
+		if err := json.Unmarshal(processed.Body.Bytes(), &doc); err != nil {
+			return false
+		}
+		return doc.Status == uploadask.DocumentStatusProcessed
+	}, time.Second, 10*time.Millisecond)
 
 	processed := performJSONRequest(http.MethodGet, docPath, "", server)
 	require.Equal(t, http.StatusOK, processed.Code)
@@ -549,6 +565,12 @@ func withAuthToken(token string) requestOption {
 	}
 }
 
+func withRequestContext(ctx context.Context) requestOption {
+	return func(req *http.Request) {
+		*req = *req.WithContext(ctx)
+	}
+}
+
 func TestRouter_UVAdviceSuccess(t *testing.T) {
 	advice := uvadvisor.Response{Date: "2024-07-01", Category: "high", Summary: "Hot", Clothing: []string{"Hat"}}
 	svc := &stubUVAdvisor{
@@ -669,6 +691,37 @@ func newTestLogger() *slog.Logger {
 }
 
 func newLocalUploadAskServiceForTest() *uploadask.Service {
+	return newLocalUploadAskServiceForTestWithQueueAndStorage(nil, uploadstorage.NewMemoryStorage())
+}
+
+func newQueuedLocalUploadAskServiceForTest(t *testing.T, storage uploadask.ObjectStorage) *uploadask.Service {
+	t.Helper()
+	queue := uploadqueue.NewImmediateQueue(nil)
+	svc := newLocalUploadAskServiceForTestWithQueueAndStorage(queue, storage)
+	queue.SetHandler(func(ctx context.Context, name string, payload map[string]any) {
+		if name != "process_document" {
+			return
+		}
+		rawDocID, ok := payload["document_id"].(string)
+		if !ok {
+			return
+		}
+		docID, err := uuid.Parse(rawDocID)
+		if err != nil {
+			return
+		}
+		userID, ok := payload["user_id"].(int64)
+		if !ok {
+			return
+		}
+		if err := svc.ProcessDocument(ctx, docID, userID); err != nil {
+			t.Errorf("process document from queue: %v", err)
+		}
+	})
+	return svc
+}
+
+func newLocalUploadAskServiceForTestWithQueueAndStorage(queue uploadask.JobQueue, storage uploadask.ObjectStorage) *uploadask.Service {
 	docs := uploadrepo.NewMemoryDocumentRepository()
 	files := uploadrepo.NewMemoryFileRepository()
 	chunks := uploadrepo.NewMemoryChunkRepository(docs)
@@ -695,13 +748,70 @@ func newLocalUploadAskServiceForTest() *uploadask.Service {
 		logs,
 		uploadmemory.NewMemoryMessageLog(),
 		uploadmemory.NewMemoryStore(),
-		uploadstorage.NewMemoryStorage(),
+		storage,
 		uploadembedder.NewDeterministicEmbedder(32),
 		uploadllm.EchoLLM{},
 		uploadchunker.NewSimpleChunker(120, 0),
-		nil,
+		queue,
 		newTestLogger(),
 	)
+}
+
+type blockingGetStorage struct {
+	mu       sync.Mutex
+	objects  map[string]storedObject
+	allowGet chan struct{}
+}
+
+type storedObject struct {
+	data     []byte
+	mimeType string
+	etag     string
+}
+
+func newBlockingGetStorage() *blockingGetStorage {
+	return &blockingGetStorage{
+		objects:  make(map[string]storedObject),
+		allowGet: make(chan struct{}),
+	}
+}
+
+func (s *blockingGetStorage) Put(_ context.Context, key string, data []byte, mimeType string) (uploadask.StoredObject, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	copied := append([]byte(nil), data...)
+	obj := storedObject{data: copied, mimeType: mimeType, etag: "memory-etag"}
+	s.objects[key] = obj
+	return uploadask.StoredObject{Key: key, Size: int64(len(copied)), MimeType: mimeType, ETag: obj.etag}, nil
+}
+
+func (s *blockingGetStorage) Get(ctx context.Context, key string) (io.ReadCloser, error) {
+	select {
+	case <-s.allowGet:
+	case <-time.After(time.Second):
+		return nil, context.DeadlineExceeded
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	obj, ok := s.objects[key]
+	if !ok {
+		return nil, apperrors.Wrap("not_found", "object not found", nil)
+	}
+	return io.NopCloser(bytes.NewReader(obj.data)), nil
+}
+
+func (s *blockingGetStorage) Delete(_ context.Context, key string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.objects, key)
+	return nil
+}
+
+func (s *blockingGetStorage) AllowGet() {
+	close(s.allowGet)
 }
 
 type stubSummarizer struct {

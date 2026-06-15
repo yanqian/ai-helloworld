@@ -502,3 +502,66 @@ Keep orchestrator-first work usable from agent-driven workflows by detecting pro
 
 - Root `./init.sh` after synchronizing the installed harness files.
 - Installed harness unit tests for runtime preflight pass, permission-required failure, and role-specific runtime check selection.
+
+## Upload Ask Background Context Detachment
+
+### Goal
+
+Ensure locally enqueued Upload & Ask document processing continues after the upload HTTP request returns, so uploaded documents do not remain stuck in `pending` merely because the request context was canceled.
+
+### Included Scope
+
+- The local in-process Upload & Ask immediate queue used when Valkey/Redis is disabled or unavailable.
+- The `process_document` background job path that chunks, embeds, persists chunks, and marks documents `processed`.
+- Regression tests that cancel the enqueue/request context before the background handler performs repository work.
+- HTTP/router-level coverage that proves an upload can reach `processed` through the queue instead of a manual `ProcessDocument(context.Background(), ...)` call.
+
+### Excluded Scope
+
+- Directly editing demo SQLite databases, including `/private/tmp` screenshot databases.
+- Changing Valkey queue persistence semantics; Valkey workers already consume jobs with a worker-owned background context.
+- Changing frontend polling behavior or response shapes.
+- Adding retry, dead-letter, or job recovery infrastructure beyond this request-context bug.
+- Changing document chunking, embedding, or answer quality.
+
+### Core Flows
+
+- A user uploads a document through `/api/v1/upload-ask/documents`.
+- The API persists document metadata and file metadata, enqueues `process_document`, and returns `202 Accepted`.
+- The request context may be canceled after the response, but the background processor still loads the document, updates status, writes chunks, and marks it `processed`.
+- A subsequent document fetch or filtered list returns the processed document, enabling Q&A citations without manual SQLite patching.
+
+### Constraints
+
+- Upload-time persistence and queue enqueueing must still honor the caller's request context.
+- Only detached background execution should outlive request cancellation.
+- Local tests must remain deterministic and avoid live LLM, OAuth, R2, Postgres, Valkey, pgvector, or GCP services.
+- The fix must preserve existing JobQueue interfaces and existing Valkey behavior unless the selected feature explicitly requires otherwise.
+
+### Ambiguities Or Assumptions
+
+- The observed stuck `pending` document is caused by the in-process immediate queue passing `c.Request.Context()` into a goroutine after the HTTP request completes.
+- Background jobs should not be canceled by the upload request ending, but process shutdown and future worker lifecycle cancellation can be handled separately if needed.
+- Go's `context.WithoutCancel` is available in the repository's Go toolchain, but using `context.Background()` for immediate queue handlers is also acceptable because the current queue does not carry required request-scoped values.
+
+### Required Capabilities
+
+- Focused Go tests for the immediate queue context behavior.
+- Router-level or service-level deterministic Upload & Ask processing tests with memory storage, deterministic embeddings, and Echo LLM.
+- Root `./init.sh` verification after implementation.
+
+### Implementation Paths
+
+- Immediate queue implementation and tests: `internal/infra/uploadask/queue/immediate.go` and `internal/infra/uploadask/queue/*_test.go`.
+- Upload & Ask router contract smoke: `internal/interface/http/router_test.go`.
+- Harness state and run evidence under `.agent-harness/`.
+
+### Verification Surface
+
+- A focused queue regression test fails before the context detachment and passes after it.
+- `go test -count=1 ./internal/infra/uploadask/queue ./internal/interface/http`.
+- Root `./init.sh` continues to pass.
+
+### Feature Decomposition
+
+F016 intentionally keeps the fix, regression test, and HTTP contract smoke in one feature because they verify one coherent behavior: local Upload & Ask background document processing must survive request context cancellation. Retry infrastructure, Valkey worker changes, and frontend behavior are excluded as separate future work.

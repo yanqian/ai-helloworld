@@ -258,6 +258,23 @@
       "attempts": 1,
       "last_error": "",
       "priority": "P0"
+    },
+    {
+      "id": "F016",
+      "title": "Detach Upload Ask background context",
+      "description": "Fix local Upload & Ask immediate queue processing so document background jobs continue after the upload HTTP request context is canceled.",
+      "acceptance": [
+        "ImmediateQueue delivers handlers with a context that is not canceled merely because the enqueue/request context is canceled.",
+        "Upload & Ask document processing through the in-process queue can move a document from pending to processed without manually calling ProcessDocument with context.Background.",
+        "The fix preserves upload-time persistence and enqueue behavior while keeping Valkey queue semantics unchanged.",
+        "Focused queue and HTTP/router tests cover the request-context cancellation regression.",
+        "Root `./init.sh` passes."
+      ],
+      "passes": true,
+      "status": "done",
+      "attempts": 2,
+      "last_error": "",
+      "priority": "P0"
     }
   ]
 }

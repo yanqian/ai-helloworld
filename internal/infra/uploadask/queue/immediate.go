@@ -30,7 +30,8 @@ func (q *ImmediateQueue) SetHandler(handler Handler) {
 	q.handler = handler
 }
 
-// Enqueue invokes the handler asynchronously.
+// Enqueue invokes the handler asynchronously with a job context detached from
+// request cancellation. Enqueue itself still honors the caller before this point.
 func (q *ImmediateQueue) Enqueue(ctx context.Context, name string, payload any) error {
 	typed, ok := payload.(map[string]any)
 	if !ok {
@@ -39,7 +40,8 @@ func (q *ImmediateQueue) Enqueue(ctx context.Context, name string, payload any) 
 	if q.handler == nil {
 		return nil
 	}
-	go q.handler(ctx, name, typed)
+	jobCtx := context.WithoutCancel(ctx)
+	go q.handler(jobCtx, name, typed)
 	return nil
 }
 
